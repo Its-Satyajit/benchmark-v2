@@ -37,6 +37,7 @@ export interface RawIterationTelemetry {
   wall_time_ms: number;
   steps_processed: number;
   steps_per_sec: number;
+  peak_rss_bytes: number;
   checksum: string;
   raw_step_latencies_ms?: number[];
   raw_frame_times_ms?: number[];
@@ -67,6 +68,7 @@ export interface TargetBenchmarkResult {
 export interface StressOptions {
   iterations?: number;
   concurrency?: number;
+  soakDuration?: number;
   retainSnapshots?: boolean;
   targetName?: string;
 }
@@ -141,6 +143,7 @@ export function simulateReplay(
       wall_time_ms: Math.round(iterDurationMs * 1000) / 1000,
       steps_processed: stepsProcessed,
       steps_per_sec: Math.round((stepsProcessed / (iterDurationMs / 1000)) * 100) / 100,
+      peak_rss_bytes: process.memoryUsage().rss,
       checksum: iterChecksum,
       raw_step_latencies_ms: iterLatencies.map((l) => Math.round(l * 1000) / 1000),
     });
@@ -238,6 +241,7 @@ export function simulateStressReplay(
       wall_time_ms: Math.round(iterDurationMs * 1000) / 1000,
       steps_processed: iterSteps,
       steps_per_sec: Math.round((iterSteps / (iterDurationMs / 1000)) * 100) / 100,
+      peak_rss_bytes: process.memoryUsage().rss,
       checksum: '',
       raw_step_latencies_ms: iterLatencies.map((l) => Math.round(l * 1000) / 1000),
     });
@@ -354,6 +358,7 @@ export function simulateGuiJankReplay(
       wall_time_ms: Math.round(iterDurationMs * 1000) / 1000,
       steps_processed: iterSteps,
       steps_per_sec: Math.round((iterSteps / (iterDurationMs / 1000)) * 100) / 100,
+      peak_rss_bytes: process.memoryUsage().rss,
       checksum: '',
       raw_frame_times_ms: iterFrames.map((f) => Math.round(f * 1000) / 1000),
     });

@@ -9,22 +9,31 @@ pub struct Configuration {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Card {
-    pub id: Option<i64>,
-    pub serial: Option<i64>,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Player {
     #[serde(default)]
     pub active: Vec<serde_json::Value>,
     #[serde(default)]
     pub bench: Vec<serde_json::Value>,
     #[serde(default)]
-    pub deck: Option<Vec<Card>>,
+    pub deck: Option<serde_json::Value>,
     #[serde(default)]
-    pub hand: Option<Vec<Card>>,
+    pub hand: Option<serde_json::Value>,
+}
+
+impl Player {
+    pub fn deck_len(&self) -> usize {
+        match &self.deck {
+            Some(serde_json::Value::Array(arr)) => arr.len(),
+            _ => 0,
+        }
+    }
+
+    pub fn hand_len(&self) -> usize {
+        match &self.hand {
+            Some(serde_json::Value::Array(arr)) => arr.len(),
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -60,6 +69,7 @@ pub struct RawIterationTelemetry {
     pub wall_time_ms: f64,
     pub steps_processed: usize,
     pub steps_per_sec: f64,
+    pub peak_rss_bytes: u64,
     pub checksum: String,
     pub raw_step_latencies_ms: Option<Vec<f64>>,
     pub raw_frame_times_ms: Option<Vec<f64>>,
@@ -120,17 +130,19 @@ pub fn simulate_replay_engine(
             steps_processed += 1;
             for (j, step) in step_batch.iter().enumerate() {
                 if let Some(ref act) = step.action {
-                    action_transitions += act.len();
-                    if let Ok(act_str) = serde_json::to_string(act) {
-                        hasher.update(format!("act:{}:{}:{};", i, j, act_str));
+                    if !act.is_empty() {
+                        action_transitions += act.len();
+                        if let Ok(act_str) = serde_json::to_string(act) {
+                            hasher.update(format!("act:{}:{}:{};", i, j, act_str));
+                        }
                     }
                 }
 
                 if let Some(ref obs) = step.observation {
                     if let Some(ref current) = obs.current {
                         for (p, player) in current.players.iter().enumerate() {
-                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let d_len = player.deck_len();
+                            let h_len = player.hand_len();
                             let a_len = player.active.len();
                             let b_len = player.bench.len();
                             total_cards += d_len + h_len;
@@ -157,6 +169,7 @@ pub fn simulate_replay_engine(
             wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
             steps_processed,
             steps_per_sec: ((steps_processed as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            peak_rss_bytes: 0,
             checksum: iter_checksum,
             raw_step_latencies_ms: Some(iter_latencies),
             raw_frame_times_ms: None,
@@ -235,8 +248,8 @@ pub fn simulate_stress_replay_engine(
                     if let Some(ref current) = obs.current {
                         snapshot_tree.push(current.players.clone());
                         for (p, player) in current.players.iter().enumerate() {
-                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let d_len = player.deck_len();
+                            let h_len = player.hand_len();
                             let a_len = player.active.len();
                             let b_len = player.bench.len();
                             total_cards += d_len + h_len;
@@ -261,6 +274,7 @@ pub fn simulate_stress_replay_engine(
             wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
             steps_processed: iter_steps,
             steps_per_sec: ((iter_steps as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            peak_rss_bytes: 0,
             checksum: String::new(),
             raw_step_latencies_ms: Some(iter_latencies),
             raw_frame_times_ms: None,
@@ -351,8 +365,8 @@ pub fn simulate_gui_jank_replay_engine(
                 if let Some(ref obs) = step.observation {
                     if let Some(ref current) = obs.current {
                         for (p, player) in current.players.iter().enumerate() {
-                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let d_len = player.deck_len();
+                            let h_len = player.hand_len();
                             let a_len = player.active.len();
                             let b_len = player.bench.len();
                             total_cards += d_len + h_len;
@@ -384,6 +398,7 @@ pub fn simulate_gui_jank_replay_engine(
             wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
             steps_processed: iter_steps,
             steps_per_sec: ((iter_steps as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            peak_rss_bytes: 0,
             checksum: String::new(),
             raw_step_latencies_ms: None,
             raw_frame_times_ms: Some(iter_frames),

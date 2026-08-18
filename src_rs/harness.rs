@@ -26,6 +26,7 @@ pub struct RawIterationTelemetry {
     pub wall_time_ms: f64,
     pub steps_processed: usize,
     pub steps_per_sec: f64,
+    pub peak_rss_bytes: u64,
     pub checksum: String,
     pub raw_step_latencies_ms: Option<Vec<f64>>,
     pub raw_frame_times_ms: Option<Vec<f64>>,
@@ -68,6 +69,28 @@ pub struct TargetBenchmarkReport {
     pub success: bool,
     pub error: Option<String>,
     pub metrics: Option<TargetBenchmarkResult>,
+}
+
+impl TargetBenchmarkReport {
+    pub fn dist_size_mb(&self) -> f64 {
+        (self.dist_size_bytes as f64) / (1024.0 * 1024.0)
+    }
+
+    pub fn bundle_size_kb(&self) -> f64 {
+        (self.bundle_size_bytes as f64) / 1024.0
+    }
+
+    pub fn peak_rss_mb(&self) -> f64 {
+        (self.peak_rss_bytes as f64) / (1024.0 * 1024.0)
+    }
+
+    pub fn short_checksum(&self) -> &str {
+        match &self.metrics {
+            Some(m) if m.checksum.len() >= 8 => &m.checksum[..8],
+            Some(m) => &m.checksum,
+            None => "N/A",
+        }
+    }
 }
 
 pub fn calculate_artifact_size<P: AsRef<Path>>(path: P) -> u64 {
@@ -280,20 +303,30 @@ pub fn execute_target_with_profiling(
                 .unwrap_or("");
 
             match serde_json::from_str::<TargetBenchmarkResult>(json_line) {
-                Ok(metrics) => TargetBenchmarkReport {
-                    target_id: descriptor.id.clone(),
-                    target_name: descriptor.name.clone(),
-                    category: descriptor.category.clone(),
-                    cold_build_duration_ms,
-                    warm_build_duration_ms,
-                    bundle_size_bytes,
-                    dist_size_bytes,
-                    total_wall_time_ms,
-                    peak_rss_bytes,
-                    success: true,
-                    error: None,
-                    metrics: Some(metrics),
-                },
+                Ok(mut metrics) => {
+                    if let Some(ref mut raw_iters) = metrics.raw_iterations {
+                        for iter in raw_iters {
+                            if iter.peak_rss_bytes == 0 {
+                                iter.peak_rss_bytes = peak_rss_bytes;
+                            }
+                        }
+                    }
+
+                    TargetBenchmarkReport {
+                        target_id: descriptor.id.clone(),
+                        target_name: descriptor.name.clone(),
+                        category: descriptor.category.clone(),
+                        cold_build_duration_ms,
+                        warm_build_duration_ms,
+                        bundle_size_bytes,
+                        dist_size_bytes,
+                        total_wall_time_ms,
+                        peak_rss_bytes,
+                        success: true,
+                        error: None,
+                        metrics: Some(metrics),
+                    }
+                }
                 Err(e) => TargetBenchmarkReport {
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),

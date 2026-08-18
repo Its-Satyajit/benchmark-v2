@@ -2,6 +2,7 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::harness::TargetBenchmarkReport;
 
@@ -46,13 +47,10 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                     format!("{:.1}", m.one_percent_low_fps.unwrap_or(0.0)),
                     format!("{:.2} ms", m.max_frame_time_ms.unwrap_or(0.0)),
                     format!("{}", m.jank_frame_count.unwrap_or(0)),
-                    m.checksum[..8].to_string(),
+                    r.short_checksum().to_string(),
                 ),
                 None => ("N/A".to_string(), "N/A".to_string(), "N/A".to_string(), "N/A".to_string(), "N/A".to_string()),
             };
-
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             table.add_row(vec![
                 Cell::new(&r.target_name),
@@ -62,8 +60,8 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 Cell::new(one_pct).fg(Color::Green),
                 Cell::new(max_ft),
                 Cell::new(jank_cnt),
-                Cell::new(format!("{:.2}", dist_mb)),
-                Cell::new(format!("{:.2}", rss_mb)),
+                Cell::new(format!("{:.2}", r.dist_size_mb())),
+                Cell::new(format!("{:.2}", r.peak_rss_mb())),
                 Cell::new(checksum),
             ]);
         }
@@ -91,13 +89,10 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 Some(m) => (
                     format!("{:.1}", m.steps_per_sec),
                     format!("{:.3}", m.p95_latency_ms.unwrap_or(0.0)),
-                    m.checksum[..8].to_string(),
+                    r.short_checksum().to_string(),
                 ),
                 None => ("N/A".to_string(), "N/A".to_string(), "N/A".to_string()),
             };
-
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             table.add_row(vec![
                 Cell::new(&r.target_name),
@@ -105,9 +100,9 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 status_cell,
                 Cell::new(steps_sec).fg(Color::Yellow),
                 Cell::new(format!("{:.1}", r.total_wall_time_ms)),
-                Cell::new(format!("{:.2}", rss_mb)),
+                Cell::new(format!("{:.2}", r.peak_rss_mb())),
                 Cell::new(p95_str),
-                Cell::new(format!("{:.2}", dist_mb)),
+                Cell::new(format!("{:.2}", r.dist_size_mb())),
                 Cell::new(checksum),
             ]);
         }
@@ -133,14 +128,11 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
             };
 
             let (steps_sec, checksum) = match &r.metrics {
-                Some(m) => (format!("{:.1}", m.steps_per_sec), m.checksum[..8].to_string()),
+                Some(m) => (format!("{:.1}", m.steps_per_sec), r.short_checksum().to_string()),
                 None => ("N/A".to_string(), "N/A".to_string()),
             };
 
             let cold_s = r.cold_build_duration_ms / 1000.0;
-            let bundle_kb = (r.bundle_size_bytes as f64) / 1024.0;
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             table.add_row(vec![
                 Cell::new(&r.target_name),
@@ -148,10 +140,10 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 status_cell,
                 Cell::new(format!("{:.2} s", cold_s)).fg(Color::Magenta),
                 Cell::new(format!("{:.1} ms", r.warm_build_duration_ms)),
-                Cell::new(format!("{:.1}", bundle_kb)),
-                Cell::new(format!("{:.2}", dist_mb)).fg(Color::Yellow),
+                Cell::new(format!("{:.1}", r.bundle_size_kb())),
+                Cell::new(format!("{:.2}", r.dist_size_mb())).fg(Color::Yellow),
                 Cell::new(steps_sec).fg(Color::Green),
-                Cell::new(format!("{:.2}", rss_mb)),
+                Cell::new(format!("{:.2}", r.peak_rss_mb())),
                 Cell::new(checksum),
             ]);
         }
@@ -178,7 +170,7 @@ pub fn export_results(
     };
 
     let suite = BenchmarkSuiteResult {
-        timestamp: chrono_or_fallback(),
+        timestamp: current_iso_timestamp(),
         mode: mode_str.to_string(),
         replay_file: replay_file.to_string(),
         reports: reports.to_vec(),
@@ -209,7 +201,7 @@ pub fn export_results(
         .collect();
 
     let raw_payload = serde_json::json!({
-        "timestamp": chrono_or_fallback(),
+        "timestamp": current_iso_timestamp(),
         "mode": mode_str,
         "replay_file": replay_file,
         "raw_telemetry": raw_records,
@@ -235,16 +227,14 @@ pub fn export_results(
                     format!("{:.1}", m.one_percent_low_fps.unwrap_or(0.0)),
                     format!("{:.2} ms", m.max_frame_time_ms.unwrap_or(0.0)),
                     format!("{}", m.jank_frame_count.unwrap_or(0)),
-                    &m.checksum[..8],
+                    r.short_checksum(),
                 ),
                 None => ("N/A".to_string(), "N/A".to_string(), "N/A".to_string(), "N/A".to_string(), "N/A"),
             };
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             md.push_str(&format!(
                 "| **{}** | {} | {} | **{}** | **{}** | {} | {} | {:.2} | {:.2} | `{}` |\n",
-                r.target_name, r.category, status, avg_fps, one_pct, max_ft, jank_cnt, dist_mb, rss_mb, checksum
+                r.target_name, r.category, status, avg_fps, one_pct, max_ft, jank_cnt, r.dist_size_mb(), r.peak_rss_mb(), checksum
             ));
         }
     } else if is_stress {
@@ -260,16 +250,14 @@ pub fn export_results(
                     format!("{}", m.steps_processed),
                     format!("{:.1}", m.steps_per_sec),
                     format!("{:.3}", m.p95_latency_ms.unwrap_or(0.0)),
-                    &m.checksum[..8],
+                    r.short_checksum(),
                 ),
                 None => ("N/A".to_string(), "N/A".to_string(), "N/A".to_string(), "N/A"),
             };
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             md.push_str(&format!(
                 "| **{}** | {} | {} | {} | **{}** | {:.1} | {:.2} | {} | {:.2} | `{}` |\n",
-                r.target_name, r.category, status, steps_str, steps_sec, r.total_wall_time_ms, rss_mb, p95_str, dist_mb, checksum
+                r.target_name, r.category, status, steps_str, steps_sec, r.total_wall_time_ms, r.peak_rss_mb(), p95_str, r.dist_size_mb(), checksum
             ));
         }
     } else {
@@ -281,17 +269,14 @@ pub fn export_results(
         for r in reports {
             let status = if r.success { "✅ PASS" } else { "❌ FAIL" };
             let (steps_sec, checksum) = match &r.metrics {
-                Some(m) => (format!("{:.1}", m.steps_per_sec), &m.checksum[..8]),
+                Some(m) => (format!("{:.1}", m.steps_per_sec), r.short_checksum()),
                 None => ("N/A".to_string(), "N/A"),
             };
             let cold_s = r.cold_build_duration_ms / 1000.0;
-            let bundle_kb = (r.bundle_size_bytes as f64) / 1024.0;
-            let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
-            let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             md.push_str(&format!(
                 "| **{}** | {} | {} | **{:.2} s** | {:.1} ms | {:.1} | **{:.2}** | **{}** | {:.1} | {:.2} | `{}` |\n",
-                r.target_name, r.category, status, cold_s, r.warm_build_duration_ms, bundle_kb, dist_mb, steps_sec, r.total_wall_time_ms, rss_mb, checksum
+                r.target_name, r.category, status, cold_s, r.warm_build_duration_ms, r.bundle_size_kb(), r.dist_size_mb(), steps_sec, r.total_wall_time_ms, r.peak_rss_mb(), checksum
             ));
         }
     }
@@ -299,6 +284,10 @@ pub fn export_results(
     let _ = fs::write(markdown_path, md);
 }
 
-fn chrono_or_fallback() -> String {
-    "2026-08-18T12:00:00Z".to_string()
+fn current_iso_timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{}", now)
 }
