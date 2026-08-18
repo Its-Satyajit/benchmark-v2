@@ -47,7 +47,7 @@ Comprehensive, high-precision performance, build profiling, memory RSS sampling,
 
 ```bash
 # Run all 3 benchmark suites in sequence with 10 iterations per target
-pnpm run benchmark:all
+nub run benchmark:all
 
 # Run standard baseline suite
 ./target/release/benchmark-runner data/92139349.json
@@ -64,8 +64,8 @@ pnpm run benchmark:all
 ```bash
 # Run unit and integration tests across all 24 framework targets
 cargo test
-pnpm test
-pnpm run typecheck
+nub test
+nub run typecheck
 ```
 
 ---
