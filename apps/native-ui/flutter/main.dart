@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 class SimpleSha256 {
-  // Built-in standard SHA-256 implementation without external pub dependencies
   static String hash(String input) {
     final bytes = utf8.encode(input);
     final k = [
@@ -72,6 +71,7 @@ class SimpleSha256 {
 void main(List<String> args) {
   String? replayPath;
   bool isStress = false;
+  bool isGui = false;
   int iterations = 20;
 
   for (int i = 0; i < args.length; i++) {
@@ -79,6 +79,10 @@ void main(List<String> args) {
       replayPath = args[i + 1];
     } else if (args[i] == '--stress') {
       isStress = true;
+    } else if (args[i] == '--gui' || args[i] == '--gui-jank') {
+      isGui = true;
+    } else if (args[i] == '--iterations' && i + 1 < args.length) {
+      iterations = int.tryParse(args[i + 1]) ?? 20;
     }
   }
 
@@ -101,15 +105,18 @@ void main(List<String> args) {
   int totalSteps = 0;
   int totalCards = 0;
   int totalActs = 0;
-  int actualIters = isStress ? iterations : 1;
+  int actualIters = (isStress || isGui) ? iterations : 1;
+
+  final frameTimes = <double>[];
 
   for (int it = 0; it < actualIters; it++) {
-    if (isStress) sb.write('iter:$it;');
+    if (isStress || isGui) sb.write('iter:$it;');
     if (config != null && config['seed'] != null) {
       sb.write('seed:${config['seed']};');
     }
 
     for (int i = 0; i < steps.length; i++) {
+      final frameWatch = Stopwatch()..start();
       final stepBatch = steps[i] as List<dynamic>;
       totalSteps++;
 
@@ -119,7 +126,7 @@ void main(List<String> args) {
         if (action != null && action.isNotEmpty) {
           totalActs += action.length;
           final actStr = jsonEncode(action);
-          if (isStress) {
+          if (isStress || isGui) {
             sb.write('act:$it:$i:$j:$actStr;');
           } else {
             sb.write('act:$i:$j:$actStr;');
@@ -148,10 +155,17 @@ void main(List<String> args) {
           sb.write('st:$status;');
         }
       }
+
+      if (isGui) {
+        frameWatch.stop();
+        frameTimes.add(frameWatch.elapsedMicroseconds / 1000.0);
+      }
     }
   }
 
-  if (isStress) {
+  if (isGui) {
+    sb.write('final_gui:steps=$totalSteps:cards=$totalCards:acts=$totalActs');
+  } else if (isStress) {
     sb.write('final_stress:steps=$totalSteps:cards=$totalCards:acts=$totalActs');
   } else {
     sb.write('final:steps=$totalSteps:cards=$totalCards:acts=$totalActs');
@@ -163,7 +177,7 @@ void main(List<String> args) {
   final totalMs = parseMs + replayMs;
   final stepsPerSec = replayMs > 0 ? (totalSteps / (replayMs / 1000.0)) : 0.0;
 
-  final output = {
+  final output = <String, dynamic>{
     'target': 'flutter-dart-desktop',
     'steps_processed': totalSteps,
     'parse_duration_ms': (parseMs * 100).round() / 100,
@@ -172,6 +186,35 @@ void main(List<String> args) {
     'steps_per_sec': (stepsPerSec * 100).round() / 100,
     'checksum': checksum,
   };
+
+  if (isGui && frameTimes.isNotEmpty) {
+    int jankCount = 0;
+    double maxFt = 0.0;
+    for (final ft in frameTimes) {
+      if (ft > 16.667) jankCount++;
+      if (ft > maxFt) maxFt = ft;
+    }
+
+    frameTimes.sort();
+    final onePctIdx = (frameTimes.length * 0.99).floor().clamp(0, frameTimes.length - 1);
+    final zeroPointOneIdx = (frameTimes.length * 0.999).floor().clamp(0, frameTimes.length - 1);
+
+    final onePctMs = frameTimes[onePctIdx] > 0 ? frameTimes[onePctIdx] : 0.001;
+    final zeroPointOneMs = frameTimes[zeroPointOneIdx] > 0 ? frameTimes[zeroPointOneIdx] : 0.001;
+
+    final avgFps = frameTimes.length / (replayMs / 1000.0);
+    final onePctFps = 1000.0 / onePctMs;
+    final zeroPointOneFps = 1000.0 / zeroPointOneMs;
+    final jankPct = (jankCount / frameTimes.length) * 100.0;
+
+    output['total_frames_rendered'] = frameTimes.length;
+    output['avg_fps'] = (avgFps * 10).round() / 10;
+    output['one_percent_low_fps'] = (onePctFps * 10).round() / 10;
+    output['zero_point_one_percent_low_fps'] = (zeroPointOneFps * 10).round() / 10;
+    output['jank_frame_count'] = jankCount;
+    output['jank_percentage'] = (jankPct * 100).round() / 100;
+    output['max_frame_time_ms'] = (maxFt * 100).round() / 100;
+  }
 
   print(jsonEncode(output));
 }
