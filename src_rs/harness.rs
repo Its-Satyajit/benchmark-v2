@@ -13,6 +13,7 @@ pub struct TargetDescriptor {
     pub id: String,
     pub name: String,
     pub category: String,
+    pub clean_command: Option<String>,
     pub build_command: Option<String>,
     pub bundle_artifact_path: Option<String>,
     pub dist_artifact_path: Option<String>,
@@ -46,7 +47,8 @@ pub struct TargetBenchmarkReport {
     pub target_id: String,
     pub target_name: String,
     pub category: String,
-    pub build_duration_ms: f64,
+    pub cold_build_duration_ms: f64,
+    pub warm_build_duration_ms: f64,
     pub bundle_size_bytes: u64,
     pub dist_size_bytes: u64,
     pub total_wall_time_ms: f64,
@@ -100,11 +102,16 @@ pub fn execute_target_with_profiling(
     descriptor: &TargetDescriptor,
     replay_path: &str,
 ) -> TargetBenchmarkReport {
-    let mut build_duration_ms = 0.0;
+    let mut cold_build_duration_ms = 0.0;
+    let mut warm_build_duration_ms = 0.0;
 
-    // 1. Clean build profiling
+    // 1. Clean & Cold Build Pass
+    if let Some(ref clean_cmd) = descriptor.clean_command {
+        let _ = Command::new("sh").arg("-c").arg(clean_cmd).status();
+    }
+
     if let Some(ref build_cmd) = descriptor.build_command {
-        let build_start = Instant::now();
+        let cold_start = Instant::now();
         let status = Command::new("sh")
             .arg("-c")
             .arg(build_cmd)
@@ -112,20 +119,21 @@ pub fn execute_target_with_profiling(
 
         match status {
             Ok(s) if s.success() => {
-                build_duration_ms = build_start.elapsed().as_secs_f64() * 1000.0;
+                cold_build_duration_ms = cold_start.elapsed().as_secs_f64() * 1000.0;
             }
             Ok(s) => {
                 return TargetBenchmarkReport {
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms: 0.0,
+                    cold_build_duration_ms: 0.0,
+                    warm_build_duration_ms: 0.0,
                     bundle_size_bytes: 0,
                     dist_size_bytes: 0,
                     total_wall_time_ms: 0.0,
                     peak_rss_bytes: 0,
                     success: false,
-                    error: Some(format!("Build failed with exit status: {}", s)),
+                    error: Some(format!("Cold build failed with exit status: {}", s)),
                     metrics: None,
                 };
             }
@@ -134,20 +142,34 @@ pub fn execute_target_with_profiling(
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms: 0.0,
+                    cold_build_duration_ms: 0.0,
+                    warm_build_duration_ms: 0.0,
                     bundle_size_bytes: 0,
                     dist_size_bytes: 0,
                     total_wall_time_ms: 0.0,
                     peak_rss_bytes: 0,
                     success: false,
-                    error: Some(format!("Failed to spawn build command: {}", e)),
+                    error: Some(format!("Failed to spawn cold build command: {}", e)),
                     metrics: None,
                 };
             }
         }
+
+        // 2. Warm Incremental Build Pass
+        let warm_start = Instant::now();
+        let warm_status = Command::new("sh")
+            .arg("-c")
+            .arg(build_cmd)
+            .status();
+
+        if let Ok(s) = warm_status {
+            if s.success() {
+                warm_build_duration_ms = warm_start.elapsed().as_secs_f64() * 1000.0;
+            }
+        }
     }
 
-    // 2. Measure Dual-Tier Artifact Sizes
+    // 3. Measure Dual-Tier Artifact Sizes
     let bundle_size_bytes = descriptor
         .bundle_artifact_path
         .as_ref()
@@ -160,7 +182,7 @@ pub fn execute_target_with_profiling(
         .map(|p| calculate_artifact_size(p))
         .unwrap_or(bundle_size_bytes);
 
-    // 3. Execution & Memory Sampling Phase
+    // 4. Execution & Memory Sampling Phase
     let run_cmd = descriptor
         .run_command
         .replace("${REPLAY_PATH}", replay_path);
@@ -171,7 +193,8 @@ pub fn execute_target_with_profiling(
             target_id: descriptor.id.clone(),
             target_name: descriptor.name.clone(),
             category: descriptor.category.clone(),
-            build_duration_ms,
+            cold_build_duration_ms,
+            warm_build_duration_ms,
             bundle_size_bytes,
             dist_size_bytes,
             total_wall_time_ms: 0.0,
@@ -196,7 +219,8 @@ pub fn execute_target_with_profiling(
                 target_id: descriptor.id.clone(),
                 target_name: descriptor.name.clone(),
                 category: descriptor.category.clone(),
-                build_duration_ms,
+                cold_build_duration_ms,
+                warm_build_duration_ms,
                 bundle_size_bytes,
                 dist_size_bytes,
                 total_wall_time_ms: 0.0,
@@ -248,7 +272,8 @@ pub fn execute_target_with_profiling(
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms,
+                    cold_build_duration_ms,
+                    warm_build_duration_ms,
                     bundle_size_bytes,
                     dist_size_bytes,
                     total_wall_time_ms,
@@ -261,7 +286,8 @@ pub fn execute_target_with_profiling(
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms,
+                    cold_build_duration_ms,
+                    warm_build_duration_ms,
                     bundle_size_bytes,
                     dist_size_bytes,
                     total_wall_time_ms,
@@ -278,7 +304,8 @@ pub fn execute_target_with_profiling(
                 target_id: descriptor.id.clone(),
                 target_name: descriptor.name.clone(),
                 category: descriptor.category.clone(),
-                build_duration_ms,
+                cold_build_duration_ms,
+                warm_build_duration_ms,
                 bundle_size_bytes,
                 dist_size_bytes,
                 total_wall_time_ms,
@@ -292,7 +319,8 @@ pub fn execute_target_with_profiling(
             target_id: descriptor.id.clone(),
             target_name: descriptor.name.clone(),
             category: descriptor.category.clone(),
-            build_duration_ms,
+            cold_build_duration_ms,
+            warm_build_duration_ms,
             bundle_size_bytes,
             dist_size_bytes,
             total_wall_time_ms,

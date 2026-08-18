@@ -116,11 +116,11 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
             Cell::new("Target Stack").fg(Color::Cyan),
             Cell::new("Category").fg(Color::Cyan),
             Cell::new("Status").fg(Color::Cyan),
-            Cell::new("Build (ms)").fg(Color::Cyan),
+            Cell::new("Cold Build (s)").fg(Color::Cyan),
+            Cell::new("Warm Build (ms)").fg(Color::Cyan),
             Cell::new("Bundle (KB)").fg(Color::Cyan),
             Cell::new("Dist (MB)").fg(Color::Cyan),
             Cell::new("Throughput (steps/s)").fg(Color::Cyan),
-            Cell::new("Wall Time (ms)").fg(Color::Cyan),
             Cell::new("Peak RSS (MB)").fg(Color::Cyan),
             Cell::new("Checksum").fg(Color::Cyan),
         ]);
@@ -137,6 +137,7 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 None => ("N/A".to_string(), "N/A".to_string()),
             };
 
+            let cold_s = r.cold_build_duration_ms / 1000.0;
             let bundle_kb = (r.bundle_size_bytes as f64) / 1024.0;
             let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
             let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
@@ -145,11 +146,11 @@ pub fn render_terminal_table(reports: &[TargetBenchmarkReport], is_stress: bool,
                 Cell::new(&r.target_name),
                 Cell::new(&r.category),
                 status_cell,
-                Cell::new(format!("{:.1}", r.build_duration_ms)),
+                Cell::new(format!("{:.2} s", cold_s)).fg(Color::Magenta),
+                Cell::new(format!("{:.1} ms", r.warm_build_duration_ms)),
                 Cell::new(format!("{:.1}", bundle_kb)),
-                Cell::new(format!("{:.2}", dist_mb)).fg(Color::Magenta),
-                Cell::new(steps_sec).fg(Color::Yellow),
-                Cell::new(format!("{:.1}", r.total_wall_time_ms)),
+                Cell::new(format!("{:.2}", dist_mb)).fg(Color::Yellow),
+                Cell::new(steps_sec).fg(Color::Green),
                 Cell::new(format!("{:.2}", rss_mb)),
                 Cell::new(checksum),
             ]);
@@ -241,8 +242,8 @@ pub fn export_results(
     } else {
         md.push_str("# Multi-Stack Application Benchmark Results Matrix\n\n");
         md.push_str(&format!("**Replay Log**: `{}`\n\n", replay_file));
-        md.push_str("| Target Stack | Category | Status | Build (ms) | Bundle (KB) | Dist (MB) | Throughput (steps/s) | Wall Time (ms) | Peak RSS (MB) | Checksum |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        md.push_str("| Target Stack | Category | Status | Cold Build (s) | Warm Build (ms) | Bundle (KB) | Dist (MB) | Throughput (steps/s) | Wall Time (ms) | Peak RSS (MB) | Checksum |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
 
         for r in reports {
             let status = if r.success { "✅ PASS" } else { "❌ FAIL" };
@@ -250,13 +251,14 @@ pub fn export_results(
                 Some(m) => (format!("{:.1}", m.steps_per_sec), &m.checksum[..8]),
                 None => ("N/A".to_string(), "N/A"),
             };
+            let cold_s = r.cold_build_duration_ms / 1000.0;
             let bundle_kb = (r.bundle_size_bytes as f64) / 1024.0;
             let dist_mb = (r.dist_size_bytes as f64) / (1024.0 * 1024.0);
             let rss_mb = (r.peak_rss_bytes as f64) / (1024.0 * 1024.0);
 
             md.push_str(&format!(
-                "| **{}** | {} | {} | {:.1} | {:.1} | **{:.2}** | **{}** | {:.1} | {:.2} | `{}` |\n",
-                r.target_name, r.category, status, r.build_duration_ms, bundle_kb, dist_mb, steps_sec, r.total_wall_time_ms, rss_mb, checksum
+                "| **{}** | {} | {} | **{:.2} s** | {:.1} ms | {:.1} | **{:.2}** | **{}** | {:.1} | {:.2} | `{}` |\n",
+                r.target_name, r.category, status, cold_s, r.warm_build_duration_ms, bundle_kb, dist_mb, steps_sec, r.total_wall_time_ms, rss_mb, checksum
             ));
         }
     }
