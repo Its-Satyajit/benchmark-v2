@@ -2,6 +2,11 @@ node_modules/
 dist/
 .target/
 target/
+**/target/
+**/bin/
+**/obj/
 .next/
 *.log
 .scratch/
+.benchmark.lock
+

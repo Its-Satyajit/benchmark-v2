@@ -58,7 +58,7 @@ fn main() {
     let run_all = args.iter().any(|a| a == "--all");
     let is_stress = args.iter().any(|a| a == "--stress");
     let is_gui = args.iter().any(|a| a == "--gui" || a == "--gui-jank");
-    let iter_idx = args.iter().position(|a| a == "--iterations");
+    let iter_idx = args.iter().position(|a| a == "--iterations" || a == "--iterate" || a == "-i");
     let iterations = match iter_idx {
         Some(idx) => args.get(idx + 1).and_then(|v| v.parse::<usize>().ok()).unwrap_or(10),
         None => 10,
