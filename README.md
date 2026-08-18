@@ -25,12 +25,12 @@ Comprehensive, high-precision performance, build profiling, memory RSS sampling,
 
 ## 📊 Benchmark Results
 
-- [Standard Baseline Matrix (`BENCHMARK_RESULTS.md`)](./BENCHMARK_RESULTS.md)
-- [Multi-Core Saturation Stress Results (`BENCHMARK_STRESS_RESULTS.md`)](./BENCHMARK_STRESS_RESULTS.md)
-- [GUI Jank & Frame Pacing Results (`BENCHMARK_GUI_RESULTS.md`)](./BENCHMARK_GUI_RESULTS.md)
-- [Raw Baseline Telemetry Data (`benchmark-raw-data.json`)](./benchmark-raw-data.json)
-- [Raw Stress Telemetry Data (`benchmark-stress-raw-data.json`)](./benchmark-stress-raw-data.json)
-- [Raw GUI Jank Telemetry Data (`benchmark-gui-raw-data.json`)](./benchmark-gui-raw-data.json)
+- [Standard Baseline Matrix (`results/BENCHMARK_RESULTS.md`)](./results/BENCHMARK_RESULTS.md)
+- [Multi-Core Saturation Stress Results (`results/BENCHMARK_STRESS_RESULTS.md`)](./results/BENCHMARK_STRESS_RESULTS.md)
+- [GUI Jank & Frame Pacing Results (`results/BENCHMARK_GUI_RESULTS.md`)](./results/BENCHMARK_GUI_RESULTS.md)
+- [Raw Baseline Telemetry Data (`results/benchmark-raw-data.json`)](./results/benchmark-raw-data.json)
+- [Raw Stress Telemetry Data (`results/benchmark-stress-raw-data.json`)](./results/benchmark-stress-raw-data.json)
+- [Raw GUI Jank Telemetry Data (`results/benchmark-gui-raw-data.json`)](./results/benchmark-gui-raw-data.json)
 
 ---
 
@@ -50,13 +50,13 @@ Comprehensive, high-precision performance, build profiling, memory RSS sampling,
 pnpm run benchmark:all
 
 # Run standard baseline suite
-./target/release/benchmark-runner 92139349.json
+./target/release/benchmark-runner data/92139349.json
 
 # Run extreme saturation stress suite
-./target/release/benchmark-runner --stress --iterations 10 92139349.json
+./target/release/benchmark-runner --stress --iterations 10 data/92139349.json
 
 # Run real-time GUI jank & frame pacing suite
-./target/release/benchmark-runner --gui --iterations 10 92139349.json
+./target/release/benchmark-runner --gui --iterations 10 data/92139349.json
 ```
 
 ### Run Automated Verification Suites

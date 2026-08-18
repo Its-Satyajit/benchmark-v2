@@ -8,7 +8,7 @@ import {
 } from '../src/runner/harness.ts';
 
 describe('Benchmark Runner Harness & Profiler', () => {
-  const replayPath = join(process.cwd(), '92139349.json');
+  const replayPath = join(process.cwd(), 'data', '92139349.json');
 
   it('should accurately calculate file and directory artifact sizes', async () => {
     const singleFileSize = await calculateArtifactSize(replayPath);

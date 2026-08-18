@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { simulateReplay, type ReplayLog } from '../src/core/replay.ts';
 
 describe('Core Replay Simulation Engine', () => {
-  const replayPath = join(process.cwd(), '92139349.json');
+  const replayPath = join(process.cwd(), 'data', '92139349.json');
 
   it('should parse the reference replay log successfully', () => {
     const raw = readFileSync(replayPath, 'utf8');

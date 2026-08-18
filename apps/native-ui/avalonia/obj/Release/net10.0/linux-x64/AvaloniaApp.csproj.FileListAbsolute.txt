@@ -200,3 +200,4 @@
 /home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net10.0/linux-x64/AvaloniaApp.pdb
 /home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net10.0/linux-x64/AvaloniaApp.genruntimeconfig.cache
 /home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net10.0/linux-x64/ref/AvaloniaApp.dll
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net10.0/linux-x64/AvaloniaApp.sourcelink.json

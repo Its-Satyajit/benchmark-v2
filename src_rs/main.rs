@@ -42,11 +42,11 @@ fn run_suite(
     render_terminal_table(&reports, is_stress, is_gui);
 
     let (json_file, md_file, raw_file) = if is_gui {
-        ("benchmark-gui-results.json", "BENCHMARK_GUI_RESULTS.md", "benchmark-gui-raw-data.json")
+        ("results/benchmark-gui-results.json", "results/BENCHMARK_GUI_RESULTS.md", "results/benchmark-gui-raw-data.json")
     } else if is_stress {
-        ("benchmark-stress-results.json", "BENCHMARK_STRESS_RESULTS.md", "benchmark-stress-raw-data.json")
+        ("results/benchmark-stress-results.json", "results/BENCHMARK_STRESS_RESULTS.md", "results/benchmark-stress-raw-data.json")
     } else {
-        ("benchmark-results.json", "BENCHMARK_RESULTS.md", "benchmark-raw-data.json")
+        ("results/benchmark-results.json", "results/BENCHMARK_RESULTS.md", "results/benchmark-raw-data.json")
     };
 
     export_results(&reports, replay_path, is_stress, is_gui, json_file, md_file, raw_file);
@@ -64,12 +64,18 @@ fn main() {
         None => 10,
     };
 
+    let default_replay = if Path::new("data/92139349.json").exists() {
+        "data/92139349.json"
+    } else {
+        "92139349.json"
+    };
+
     let replay_path = args
         .iter()
         .skip(1)
         .find(|a| !a.starts_with("--") && *a != &iterations.to_string())
         .map(|s| s.as_str())
-        .unwrap_or("92139349.json");
+        .unwrap_or(default_replay);
 
     if !Path::new(&replay_path).exists() {
         eprintln!("Error: Replay Log '{}' not found.", replay_path);

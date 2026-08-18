@@ -6,8 +6,8 @@
   "scripts": {
     "test": "nub --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "benchmark": "nub src/cli.ts",
-    "benchmark:all": "./target/release/benchmark-runner --all --iterations 10 92139349.json"
+    "benchmark": "./target/release/benchmark-runner data/92139349.json",
+    "benchmark:all": "./target/release/benchmark-runner --all --iterations 10 data/92139349.json"
   },
   "dependencies": {
     "elysia": "^1.4.29"

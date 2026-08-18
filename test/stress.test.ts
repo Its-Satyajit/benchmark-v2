@@ -9,7 +9,7 @@ import {
 } from '../packages/shared-replay-core/src/index.ts';
 
 describe('Extreme Saturation Stress Engine (Shared TS Core)', () => {
-  const replayPath = join(process.cwd(), '92139349.json');
+  const replayPath = join(process.cwd(), 'data', '92139349.json');
   const raw = readFileSync(replayPath, 'utf8');
   const data = JSON.parse(raw) as ReplayLog;
 

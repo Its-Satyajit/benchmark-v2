@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { executeTargetWithProfiling, type TargetDescriptor } from '../src/runner/harness.ts';
 
 describe('Multi-Stack Target Verification Suite', () => {
-  const replayPath = join(process.cwd(), '92139349.json');
+  const replayPath = join(process.cwd(), 'data', '92139349.json');
 
   const targets: TargetDescriptor[] = [
     {
