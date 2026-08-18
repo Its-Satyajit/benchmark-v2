@@ -1,0 +1,126 @@
+{
+  "timestamp": "2026-08-18T11:00:00Z",
+  "replay_file": "92139349.json",
+  "reports": [
+    {
+      "target_id": "rust-native-cli",
+      "target_name": "Rust Native Binary (Compiled)",
+      "category": "Native",
+      "build_duration_ms": 62.58,
+      "artifact_size_bytes": 699120,
+      "total_wall_time_ms": 51.2,
+      "peak_rss_bytes": 21700608,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "rust-native-cli",
+        "steps_processed": 271,
+        "parse_duration_ms": 41.47,
+        "replay_duration_ms": 0.81,
+        "total_duration_ms": 42.28,
+        "steps_per_sec": 6409.71,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    },
+    {
+      "target_id": "node-cli",
+      "target_name": "Node / Strict TS7 CLI (nub)",
+      "category": "CLI",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1017,
+      "total_wall_time_ms": 338.09,
+      "peak_rss_bytes": 25985024,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "ts-cli",
+        "steps_processed": 271,
+        "parse_duration_ms": 113.44,
+        "replay_duration_ms": 3.0415440000000444,
+        "total_duration_ms": 116.48,
+        "steps_per_sec": 2326.64,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    },
+    {
+      "target_id": "python-cli",
+      "target_name": "Python 3 CLI",
+      "category": "CLI",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 3200,
+      "total_wall_time_ms": 240.89,
+      "peak_rss_bytes": 60235776,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "python-cli",
+        "steps_processed": 271,
+        "parse_duration_ms": 177.57,
+        "replay_duration_ms": 2.79,
+        "total_duration_ms": 180.35,
+        "steps_per_sec": 1502.6,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    },
+    {
+      "target_id": "elysia-backend",
+      "target_name": "ElysiaJS Web Backend (nub)",
+      "category": "Web Backend",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1335,
+      "total_wall_time_ms": 311.23,
+      "peak_rss_bytes": 25812992,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "elysia-backend",
+        "steps_processed": 271,
+        "parse_duration_ms": 62.58,
+        "replay_duration_ms": 1.949456999999995,
+        "total_duration_ms": 64.53,
+        "steps_per_sec": 4199.34,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    },
+    {
+      "target_id": "nextjs-ssr",
+      "target_name": "Next.js SSR Metaframework (nub)",
+      "category": "Metaframework",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1176,
+      "total_wall_time_ms": 205.54,
+      "peak_rss_bytes": 25862144,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "nextjs-ssr-metaframework",
+        "steps_processed": 271,
+        "parse_duration_ms": 66.15,
+        "replay_duration_ms": 1.8876539999999975,
+        "total_duration_ms": 68.04,
+        "steps_per_sec": 3983.05,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    },
+    {
+      "target_id": "desktop-app",
+      "target_name": "Desktop App (Tauri / Electron IPC) (nub)",
+      "category": "Desktop",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1150,
+      "total_wall_time_ms": 197.61,
+      "peak_rss_bytes": 25952256,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "tauri-electron-desktop",
+        "steps_processed": 271,
+        "parse_duration_ms": 62.68,
+        "replay_duration_ms": 2.0495509999999797,
+        "total_duration_ms": 64.73,
+        "steps_per_sec": 4186.43,
+        "checksum": "38671a4f8f5a87825442cb2430f979d0f970eb00c367c7ba24f44409ad2a8631"
+      }
+    }
+  ]
+}
