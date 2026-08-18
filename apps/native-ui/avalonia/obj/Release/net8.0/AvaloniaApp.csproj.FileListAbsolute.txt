@@ -1,0 +1,4 @@
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net8.0/AvaloniaApp.GeneratedMSBuildEditorConfig.editorconfig
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net8.0/AvaloniaApp.AssemblyInfoInputs.cache
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net8.0/AvaloniaApp.AssemblyInfo.cs
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/apps/native-ui/avalonia/obj/Release/net8.0/AvaloniaApp.csproj.CoreCompileInputs.cache
