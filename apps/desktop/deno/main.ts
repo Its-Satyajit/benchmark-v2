@@ -1,2 +1,2 @@
-import { runGenericTarget } from '../../../packages/shared-replay-core/src/index.ts';
+import { runGenericTarget } from '../../../packages/shared-replay-core/src/runner.ts';
 runGenericTarget('deno-desktop');

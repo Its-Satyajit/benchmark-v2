@@ -55,6 +55,17 @@ pub struct ReplayLog {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RawIterationTelemetry {
+    pub iteration: usize,
+    pub wall_time_ms: f64,
+    pub steps_processed: usize,
+    pub steps_per_sec: f64,
+    pub checksum: String,
+    pub raw_step_latencies_ms: Option<Vec<f64>>,
+    pub raw_frame_times_ms: Option<Vec<f64>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BenchmarkOutput {
     pub target: String,
     pub steps_processed: usize,
@@ -74,321 +85,100 @@ pub struct BenchmarkOutput {
     pub jank_frame_count: Option<usize>,
     pub jank_percentage: Option<f64>,
     pub max_frame_time_ms: Option<f64>,
+    pub raw_iterations: Option<Vec<RawIterationTelemetry>>,
 }
 
 pub fn simulate_replay_engine(
     replay: &ReplayLog,
     parse_duration_ms: f64,
     target_name: &str,
+    iterations: usize,
 ) -> BenchmarkOutput {
     let replay_start = Instant::now();
-    let mut hasher = Sha256::new();
+    let iters = if iterations == 0 { 1 } else { iterations };
+    let mut raw_iterations = Vec::new();
+    let mut total_steps_processed = 0;
+    let mut final_checksum = String::new();
 
-    if let Some(ref config) = replay.configuration {
-        if let Some(seed) = config.seed {
-            hasher.update(format!("seed:{};", seed));
-        }
-    }
+    for it in 0..iters {
+        let iter_start = Instant::now();
+        let mut hasher = Sha256::new();
+        let mut iter_latencies = Vec::new();
 
-    let mut steps_processed = 0;
-    let mut total_cards = 0;
-    let mut action_transitions = 0;
-
-    for (i, step_batch) in replay.steps.iter().enumerate() {
-        steps_processed += 1;
-        for (j, step) in step_batch.iter().enumerate() {
-            if let Some(ref act) = step.action {
-                if !act.is_empty() {
-                    action_transitions += act.len();
-                    hasher.update(format!("act:{}:{}:{};", i, j, serde_json::to_string(act).unwrap()));
-                }
-            }
-
-            if let Some(ref obs) = step.observation {
-                if let Some(ref current) = obs.current {
-                    for (p, player) in current.players.iter().enumerate() {
-                        let deck_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                        let hand_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
-                        total_cards += deck_len + hand_len;
-                        hasher.update(format!(
-                            "p:{}:d{}:h{}:a{}:b{};",
-                            p,
-                            deck_len,
-                            hand_len,
-                            player.active.len(),
-                            player.bench.len()
-                        ));
-                    }
-                }
-            }
-
-            if let Some(ref st) = step.status {
-                hasher.update(format!("st:{};", st));
-            }
-        }
-    }
-
-    hasher.update(format!(
-        "final:steps={}:cards={}:acts={}",
-        steps_processed, total_cards, action_transitions
-    ));
-
-    let checksum = hex::encode(hasher.finalize());
-    let replay_duration_ms = replay_start.elapsed().as_secs_f64() * 1000.0;
-    let total_duration_ms = parse_duration_ms + replay_duration_ms;
-    let steps_per_sec = (steps_processed as f64 / (replay_duration_ms / 1000.0)).max(0.0);
-
-    BenchmarkOutput {
-        target: target_name.to_string(),
-        steps_processed,
-        parse_duration_ms: (parse_duration_ms * 100.0).round() / 100.0,
-        replay_duration_ms: (replay_duration_ms * 100.0).round() / 100.0,
-        total_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
-        steps_per_sec: (steps_per_sec * 100.0).round() / 100.0,
-        checksum,
-        snapshots_retained: None,
-        p50_latency_ms: None,
-        p95_latency_ms: None,
-        p99_latency_ms: None,
-        total_frames_rendered: None,
-        avg_fps: None,
-        one_percent_low_fps: None,
-        zero_point_one_percent_low_fps: None,
-        jank_frame_count: None,
-        jank_percentage: None,
-        max_frame_time_ms: None,
-    }
-}
-
-pub fn simulate_gui_jank_replay_engine(
-    replay: &ReplayLog,
-    parse_duration_ms: f64,
-    iterations: usize,
-    target_name: &str,
-) -> BenchmarkOutput {
-    let start_time = Instant::now();
-    let mut hasher = Sha256::new();
-    let mut frame_times_ms: Vec<f64> = Vec::new();
-    let vsync_budget_ms = 16.667;
-
-    let mut total_steps = 0;
-    let mut total_cards = 0;
-    let mut total_acts = 0;
-
-    for it in 0..iterations {
-        hasher.update(format!("iter:{};", it));
         if let Some(ref config) = replay.configuration {
             if let Some(seed) = config.seed {
                 hasher.update(format!("seed:{};", seed));
             }
         }
 
-        for (i, step_batch) in replay.steps.iter().enumerate() {
-            let frame_start = Instant::now();
-            total_steps += 1;
+        let mut steps_processed = 0;
+        let mut total_cards = 0;
+        let mut action_transitions = 0;
 
+        for (i, step_batch) in replay.steps.iter().enumerate() {
+            let step_start = Instant::now();
+            steps_processed += 1;
             for (j, step) in step_batch.iter().enumerate() {
                 if let Some(ref act) = step.action {
-                    if !act.is_empty() {
-                        total_acts += act.len();
-                        hasher.update(format!("act:{}:{}:{}:{};", it, i, j, serde_json::to_string(act).unwrap()));
+                    action_transitions += act.len();
+                    if let Ok(act_str) = serde_json::to_string(act) {
+                        hasher.update(format!("act:{}:{}:{};", i, j, act_str));
                     }
                 }
 
                 if let Some(ref obs) = step.observation {
                     if let Some(ref current) = obs.current {
                         for (p, player) in current.players.iter().enumerate() {
-                            let deck_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                            let hand_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
-                            total_cards += deck_len + hand_len;
-                            hasher.update(format!(
-                                "p:{}:d{}:h{}:a{}:b{};",
-                                p,
-                                deck_len,
-                                hand_len,
-                                player.active.len(),
-                                player.bench.len()
-                            ));
+                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
+                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let a_len = player.active.len();
+                            let b_len = player.bench.len();
+                            total_cards += d_len + h_len;
+                            hasher.update(format!("p:{}:d{}:h{}:a{}:b{};", p, d_len, h_len, a_len, b_len));
                         }
                     }
                 }
 
-                if let Some(ref st) = step.status {
-                    hasher.update(format!("st:{};", st));
+                if let Some(ref status) = step.status {
+                    hasher.update(format!("st:{};", status));
                 }
             }
-
-            frame_times_ms.push(frame_start.elapsed().as_secs_f64() * 1000.0);
+            iter_latencies.push(step_start.elapsed().as_secs_f64() * 1000.0);
         }
+
+        hasher.update(format!("final:steps={}:cards={}:acts={}", steps_processed, total_cards, action_transitions));
+        let iter_checksum = hex::encode(hasher.finalize());
+        final_checksum = iter_checksum.clone();
+        let iter_duration_ms = (iter_start.elapsed().as_secs_f64() * 1000.0).max(0.001);
+        total_steps_processed += steps_processed;
+
+        raw_iterations.push(RawIterationTelemetry {
+            iteration: it + 1,
+            wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
+            steps_processed,
+            steps_per_sec: ((steps_processed as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            checksum: iter_checksum,
+            raw_step_latencies_ms: Some(iter_latencies),
+            raw_frame_times_ms: None,
+        });
     }
 
-    hasher.update(format!("final_gui:steps={}:cards={}:acts={}", total_steps, total_cards, total_acts));
-    let checksum = hex::encode(hasher.finalize());
-
-    let total_duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-    let mut jank_count = 0;
-    let mut max_frame_time = 0.0;
-
-    for &ft in &frame_times_ms {
-        if ft > vsync_budget_ms {
-            jank_count += 1;
-        }
-        if ft > max_frame_time {
-            max_frame_time = ft;
-        }
-    }
-
-    let mut sorted_desc = frame_times_ms.clone();
-    sorted_desc.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-
-    let one_pct_idx = (sorted_desc.len() as f64 * 0.01) as usize;
-    let zero_point_one_idx = (sorted_desc.len() as f64 * 0.001) as usize;
-
-    let one_pct_ms = sorted_desc.get(one_pct_idx).copied().unwrap_or(0.001).max(0.001);
-    let zero_point_one_ms = sorted_desc.get(zero_point_one_idx).copied().unwrap_or(0.001).max(0.001);
-
-    let avg_fps = (frame_times_ms.len() as f64) / (total_duration_ms / 1000.0);
-    let one_pct_fps = 1000.0 / one_pct_ms;
-    let zero_point_one_fps = 1000.0 / zero_point_one_ms;
-    let jank_pct = (jank_count as f64 / frame_times_ms.len().max(1) as f64) * 100.0;
-    let steps_per_sec = (total_steps as f64 / (total_duration_ms / 1000.0)).max(0.0);
+    let replay_duration_ms = replay_start.elapsed().as_secs_f64() * 1000.0;
+    let total_duration_ms = parse_duration_ms + replay_duration_ms;
+    let steps_per_sec = (total_steps_processed as f64) / (replay_duration_ms / 1000.0);
 
     BenchmarkOutput {
         target: target_name.to_string(),
-        steps_processed: total_steps,
-        parse_duration_ms: (parse_duration_ms * 100.0).round() / 100.0,
-        replay_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
-        total_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
-        steps_per_sec: (steps_per_sec * 100.0).round() / 100.0,
-        checksum,
+        steps_processed: total_steps_processed,
+        parse_duration_ms,
+        replay_duration_ms,
+        total_duration_ms,
+        steps_per_sec,
+        checksum: final_checksum,
         snapshots_retained: None,
         p50_latency_ms: None,
         p95_latency_ms: None,
         p99_latency_ms: None,
-        total_frames_rendered: Some(frame_times_ms.len()),
-        avg_fps: Some((avg_fps * 10.0).round() / 10.0),
-        one_percent_low_fps: Some((one_pct_fps * 10.0).round() / 10.0),
-        zero_point_one_percent_low_fps: Some((zero_point_one_fps * 10.0).round() / 10.0),
-        jank_frame_count: Some(jank_count),
-        jank_percentage: Some((jank_pct * 100.0).round() / 100.0),
-        max_frame_time_ms: Some((max_frame_time * 100.0).round() / 100.0),
-    }
-}
-
-pub fn simulate_stress_replay_engine(
-    replay: &ReplayLog,
-    parse_duration_ms: f64,
-    iterations: usize,
-    retain_snapshots: bool,
-    target_name: &str,
-) -> BenchmarkOutput {
-    let start_time = Instant::now();
-
-    let batch_results: Vec<(usize, usize, usize, String, Vec<f64>, usize)> = (0..iterations)
-        .into_par_iter()
-        .map(|it| {
-            let mut hasher = Sha256::new();
-            hasher.update(format!("iter:{};", it));
-
-            if let Some(ref config) = replay.configuration {
-                if let Some(seed) = config.seed {
-                    hasher.update(format!("seed:{};", seed));
-                }
-            }
-
-            let mut steps_count = 0;
-            let mut cards_count = 0;
-            let mut acts_count = 0;
-            let mut latencies = Vec::with_capacity(replay.steps.len());
-            let mut snapshot_tree: Vec<Vec<Player>> = Vec::new();
-
-            for (i, step_batch) in replay.steps.iter().enumerate() {
-                let step_start = Instant::now();
-                steps_count += 1;
-
-                for (j, step) in step_batch.iter().enumerate() {
-                    if let Some(ref act) = step.action {
-                        if !act.is_empty() {
-                            acts_count += act.len();
-                            hasher.update(format!("act:{}:{}:{}:{};", it, i, j, serde_json::to_string(act).unwrap()));
-                        }
-                    }
-
-                    if let Some(ref obs) = step.observation {
-                        if let Some(ref current) = obs.current {
-                            if retain_snapshots {
-                                snapshot_tree.push(current.players.clone());
-                            }
-
-                            for (p, player) in current.players.iter().enumerate() {
-                                let deck_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
-                                let hand_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
-                                cards_count += deck_len + hand_len;
-                                hasher.update(format!(
-                                    "p:{}:d{}:h{}:a{}:b{};",
-                                    p,
-                                    deck_len,
-                                    hand_len,
-                                    player.active.len(),
-                                    player.bench.len()
-                                ));
-                            }
-                        }
-                    }
-
-                    if let Some(ref st) = step.status {
-                        hasher.update(format!("st:{};", st));
-                    }
-                }
-
-                latencies.push(step_start.elapsed().as_secs_f64() * 1000.0);
-            }
-
-            let sub_hash = hex::encode(hasher.finalize());
-            (steps_count, cards_count, acts_count, sub_hash, latencies, snapshot_tree.len())
-        })
-        .collect();
-
-    let mut master_hasher = Sha256::new();
-    let mut total_steps = 0;
-    let mut total_cards = 0;
-    let mut total_acts = 0;
-    let mut all_latencies = Vec::new();
-    let mut total_snapshots = 0;
-
-    for (s, c, a, sub_hash, mut lats, snaps) in batch_results {
-        total_steps += s;
-        total_cards += c;
-        total_acts += a;
-        total_snapshots += snaps;
-        master_hasher.update(format!("batch:{};", sub_hash));
-        all_latencies.append(&mut lats);
-    }
-
-    master_hasher.update(format!("final_stress:steps={}:cards={}:acts={}", total_steps, total_cards, total_acts));
-    let checksum = hex::encode(master_hasher.finalize());
-
-    let replay_duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-    let total_duration_ms = parse_duration_ms + replay_duration_ms;
-    let steps_per_sec = (total_steps as f64 / (replay_duration_ms / 1000.0)).max(0.0);
-
-    all_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let p50 = all_latencies.get(all_latencies.len() / 2).copied().unwrap_or(0.0);
-    let p95 = all_latencies.get((all_latencies.len() as f64 * 0.95) as usize).copied().unwrap_or(0.0);
-    let p99 = all_latencies.get((all_latencies.len() as f64 * 0.99) as usize).copied().unwrap_or(0.0);
-
-    BenchmarkOutput {
-        target: target_name.to_string(),
-        steps_processed: total_steps,
-        parse_duration_ms: (parse_duration_ms * 100.0).round() / 100.0,
-        replay_duration_ms: (replay_duration_ms * 100.0).round() / 100.0,
-        total_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
-        steps_per_sec: (steps_per_sec * 100.0).round() / 100.0,
-        checksum,
-        snapshots_retained: Some(total_snapshots),
-        p50_latency_ms: Some((p50 * 1000.0).round() / 1000.0),
-        p95_latency_ms: Some((p95 * 1000.0).round() / 1000.0),
-        p99_latency_ms: Some((p99 * 1000.0).round() / 1000.0),
         total_frames_rendered: None,
         avg_fps: None,
         one_percent_low_fps: None,
@@ -396,5 +186,251 @@ pub fn simulate_stress_replay_engine(
         jank_frame_count: None,
         jank_percentage: None,
         max_frame_time_ms: None,
+        raw_iterations: Some(raw_iterations),
+    }
+}
+
+pub fn simulate_stress_replay_engine(
+    replay: &ReplayLog,
+    parse_duration_ms: f64,
+    target_name: &str,
+    iterations: usize,
+) -> BenchmarkOutput {
+    let replay_start = Instant::now();
+    let mut hasher = Sha256::new();
+    let mut latencies: Vec<f64> = Vec::new();
+    let mut snapshot_tree: Vec<Vec<Player>> = Vec::new();
+    let mut raw_iterations = Vec::new();
+
+    let mut total_steps = 0;
+    let mut total_cards = 0;
+    let mut total_acts = 0;
+
+    for it in 0..iterations {
+        let iter_start = Instant::now();
+        let mut iter_latencies = Vec::new();
+        hasher.update(format!("iter:{};", it));
+
+        if let Some(ref config) = replay.configuration {
+            if let Some(seed) = config.seed {
+                hasher.update(format!("seed:{};", seed));
+            }
+        }
+
+        let mut iter_steps = 0;
+        for (i, step_batch) in replay.steps.iter().enumerate() {
+            let step_start = Instant::now();
+            total_steps += 1;
+            iter_steps += 1;
+
+            for (j, step) in step_batch.iter().enumerate() {
+                if let Some(ref act) = step.action {
+                    total_acts += act.len();
+                    if let Ok(act_str) = serde_json::to_string(act) {
+                        hasher.update(format!("act:{}:{}:{}:{};", it, i, j, act_str));
+                    }
+                }
+
+                if let Some(ref obs) = step.observation {
+                    if let Some(ref current) = obs.current {
+                        snapshot_tree.push(current.players.clone());
+                        for (p, player) in current.players.iter().enumerate() {
+                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
+                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let a_len = player.active.len();
+                            let b_len = player.bench.len();
+                            total_cards += d_len + h_len;
+                            hasher.update(format!("p:{}:d{}:h{}:a{}:b{};", p, d_len, h_len, a_len, b_len));
+                        }
+                    }
+                }
+
+                if let Some(ref status) = step.status {
+                    hasher.update(format!("st:{};", status));
+                }
+            }
+
+            let lat = step_start.elapsed().as_secs_f64() * 1000.0;
+            iter_latencies.push(lat);
+            latencies.push(lat);
+        }
+
+        let iter_duration_ms = (iter_start.elapsed().as_secs_f64() * 1000.0).max(0.001);
+        raw_iterations.push(RawIterationTelemetry {
+            iteration: it + 1,
+            wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
+            steps_processed: iter_steps,
+            steps_per_sec: ((iter_steps as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            checksum: String::new(),
+            raw_step_latencies_ms: Some(iter_latencies),
+            raw_frame_times_ms: None,
+        });
+    }
+
+    hasher.update(format!("final_stress:steps={}:cards={}:acts={}", total_steps, total_cards, total_acts));
+    let checksum = hex::encode(hasher.finalize());
+
+    for raw in &mut raw_iterations {
+        raw.checksum = checksum.clone();
+    }
+
+    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let p50 = latencies.get((latencies.len() as f64 * 0.50) as usize).copied().unwrap_or(0.0);
+    let p95 = latencies.get((latencies.len() as f64 * 0.95) as usize).copied().unwrap_or(0.0);
+    let p99 = latencies.get((latencies.len() as f64 * 0.99) as usize).copied().unwrap_or(0.0);
+
+    let replay_duration_ms = replay_start.elapsed().as_secs_f64() * 1000.0;
+    let total_duration_ms = parse_duration_ms + replay_duration_ms;
+    let steps_per_sec = (total_steps as f64) / (replay_duration_ms / 1000.0);
+
+    BenchmarkOutput {
+        target: target_name.to_string(),
+        steps_processed: total_steps,
+        parse_duration_ms,
+        replay_duration_ms,
+        total_duration_ms,
+        steps_per_sec,
+        checksum,
+        snapshots_retained: Some(snapshot_tree.len()),
+        p50_latency_ms: Some(p50),
+        p95_latency_ms: Some(p95),
+        p99_latency_ms: Some(p99),
+        total_frames_rendered: None,
+        avg_fps: None,
+        one_percent_low_fps: None,
+        zero_point_one_percent_low_fps: None,
+        jank_frame_count: None,
+        jank_percentage: None,
+        max_frame_time_ms: None,
+        raw_iterations: Some(raw_iterations),
+    }
+}
+
+pub fn simulate_gui_jank_replay_engine(
+    replay: &ReplayLog,
+    parse_duration_ms: f64,
+    target_name: &str,
+    iterations: usize,
+) -> BenchmarkOutput {
+    let replay_start = Instant::now();
+    let mut hasher = Sha256::new();
+    let mut frame_times: Vec<f64> = Vec::new();
+    let mut raw_iterations = Vec::new();
+
+    let mut total_steps = 0;
+    let mut total_cards = 0;
+    let mut total_acts = 0;
+    let mut jank_frame_count = 0;
+    let mut max_frame_time_ms = 0.0;
+
+    for it in 0..iterations {
+        let iter_start = Instant::now();
+        let mut iter_frames = Vec::new();
+        hasher.update(format!("iter:{};", it));
+
+        if let Some(ref config) = replay.configuration {
+            if let Some(seed) = config.seed {
+                hasher.update(format!("seed:{};", seed));
+            }
+        }
+
+        let mut iter_steps = 0;
+        for (i, step_batch) in replay.steps.iter().enumerate() {
+            let frame_start = Instant::now();
+            total_steps += 1;
+            iter_steps += 1;
+
+            for (j, step) in step_batch.iter().enumerate() {
+                if let Some(ref act) = step.action {
+                    total_acts += act.len();
+                    if let Ok(act_str) = serde_json::to_string(act) {
+                        hasher.update(format!("act:{}:{}:{}:{};", it, i, j, act_str));
+                    }
+                }
+
+                if let Some(ref obs) = step.observation {
+                    if let Some(ref current) = obs.current {
+                        for (p, player) in current.players.iter().enumerate() {
+                            let d_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
+                            let h_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            let a_len = player.active.len();
+                            let b_len = player.bench.len();
+                            total_cards += d_len + h_len;
+                            hasher.update(format!("p:{}:d{}:h{}:a{}:b{};", p, d_len, h_len, a_len, b_len));
+                        }
+                    }
+                }
+
+                if let Some(ref status) = step.status {
+                    hasher.update(format!("st:{};", status));
+                }
+            }
+
+            let frame_duration = frame_start.elapsed().as_secs_f64() * 1000.0;
+            frame_times.push(frame_duration);
+            iter_frames.push(frame_duration);
+
+            if frame_duration > 16.667 {
+                jank_frame_count += 1;
+            }
+            if frame_duration > max_frame_time_ms {
+                max_frame_time_ms = frame_duration;
+            }
+        }
+
+        let iter_duration_ms = (iter_start.elapsed().as_secs_f64() * 1000.0).max(0.001);
+        raw_iterations.push(RawIterationTelemetry {
+            iteration: it + 1,
+            wall_time_ms: (iter_duration_ms * 1000.0).round() / 1000.0,
+            steps_processed: iter_steps,
+            steps_per_sec: ((iter_steps as f64) / (iter_duration_ms / 1000.0) * 100.0).round() / 100.0,
+            checksum: String::new(),
+            raw_step_latencies_ms: None,
+            raw_frame_times_ms: Some(iter_frames),
+        });
+    }
+
+    hasher.update(format!("final_gui:steps={}:cards={}:acts={}", total_steps, total_cards, total_acts));
+    let checksum = hex::encode(hasher.finalize());
+
+    for raw in &mut raw_iterations {
+        raw.checksum = checksum.clone();
+    }
+
+    let replay_duration_ms = replay_start.elapsed().as_secs_f64() * 1000.0;
+    let total_duration_ms = parse_duration_ms + replay_duration_ms;
+    let total_frames = frame_times.len();
+    let avg_fps = (total_frames as f64) / (replay_duration_ms / 1000.0);
+
+    frame_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let one_pct_idx = (frame_times.len() as f64 * 0.99) as usize;
+    let zero_point_one_idx = (frame_times.len() as f64 * 0.999) as usize;
+    let one_pct_ms = frame_times.get(one_pct_idx).copied().unwrap_or(0.001).max(0.001);
+    let zero_point_one_ms = frame_times.get(zero_point_one_idx).copied().unwrap_or(0.001).max(0.001);
+
+    let one_pct_fps = 1000.0 / one_pct_ms;
+    let zero_point_one_fps = 1000.0 / zero_point_one_ms;
+    let jank_pct = ((jank_frame_count as f64) / (total_frames.max(1) as f64)) * 100.0;
+
+    BenchmarkOutput {
+        target: target_name.to_string(),
+        steps_processed: total_steps,
+        parse_duration_ms,
+        replay_duration_ms,
+        total_duration_ms,
+        steps_per_sec: avg_fps,
+        checksum,
+        snapshots_retained: None,
+        p50_latency_ms: None,
+        p95_latency_ms: None,
+        p99_latency_ms: None,
+        total_frames_rendered: Some(total_frames),
+        avg_fps: Some(avg_fps),
+        one_percent_low_fps: Some(one_pct_fps),
+        zero_point_one_percent_low_fps: Some(zero_point_one_fps),
+        jank_frame_count: Some(jank_frame_count),
+        jank_percentage: Some(jank_pct),
+        max_frame_time_ms: Some(max_frame_time_ms),
+        raw_iterations: Some(raw_iterations),
     }
 }

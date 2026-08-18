@@ -21,6 +21,17 @@ pub struct TargetDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawIterationTelemetry {
+    pub iteration: usize,
+    pub wall_time_ms: f64,
+    pub steps_processed: usize,
+    pub steps_per_sec: f64,
+    pub checksum: String,
+    pub raw_step_latencies_ms: Option<Vec<f64>>,
+    pub raw_frame_times_ms: Option<Vec<f64>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetBenchmarkResult {
     pub target: String,
     pub steps_processed: usize,
@@ -40,6 +51,7 @@ pub struct TargetBenchmarkResult {
     pub jank_frame_count: Option<usize>,
     pub jank_percentage: Option<f64>,
     pub max_frame_time_ms: Option<f64>,
+    pub raw_iterations: Option<Vec<RawIterationTelemetry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,7 +224,7 @@ pub fn execute_target_with_profiling(
         .stderr(std::process::Stdio::piped())
         .spawn();
 
-    let mut child: Child = match child_res {
+    let child: Child = match child_res {
         Ok(c) => c,
         Err(e) => {
             return TargetBenchmarkReport {

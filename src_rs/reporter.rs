@@ -167,6 +167,7 @@ pub fn export_results(
     is_gui: bool,
     json_path: &str,
     markdown_path: &str,
+    raw_json_path: &str,
 ) {
     let mode_str = if is_gui {
         "GUI Jank & Frame Pacing Benchmark"
@@ -183,10 +184,42 @@ pub fn export_results(
         reports: reports.to_vec(),
     };
 
+    // 1. Export standard summarized JSON
     if let Ok(json_str) = serde_json::to_string_pretty(&suite) {
-        let _ = fs::write(json_path, json_str);
+        let _ = fs::write(json_path, &json_str);
     }
 
+    // 2. Export pure raw unaggregated iteration telemetry
+    let raw_records: Vec<_> = reports
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "target_id": r.target_id,
+                "target_name": r.target_name,
+                "category": r.category,
+                "cold_build_duration_ms": r.cold_build_duration_ms,
+                "warm_build_duration_ms": r.warm_build_duration_ms,
+                "bundle_size_bytes": r.bundle_size_bytes,
+                "dist_size_bytes": r.dist_size_bytes,
+                "total_wall_time_ms": r.total_wall_time_ms,
+                "peak_rss_bytes": r.peak_rss_bytes,
+                "raw_iterations": r.metrics.as_ref().and_then(|m| m.raw_iterations.clone()),
+            })
+        })
+        .collect();
+
+    let raw_payload = serde_json::json!({
+        "timestamp": chrono_or_fallback(),
+        "mode": mode_str,
+        "replay_file": replay_file,
+        "raw_telemetry": raw_records,
+    });
+
+    if let Ok(raw_json_str) = serde_json::to_string_pretty(&raw_payload) {
+        let _ = fs::write(raw_json_path, raw_json_str);
+    }
+
+    // 3. Export human-readable Markdown
     let mut md = String::new();
     if is_gui {
         md.push_str("# GUI Jank & Frame Pacing Benchmark Results\n\n");
@@ -243,7 +276,7 @@ pub fn export_results(
         md.push_str("# Multi-Stack Application Benchmark Results Matrix\n\n");
         md.push_str(&format!("**Replay Log**: `{}`\n\n", replay_file));
         md.push_str("| Target Stack | Category | Status | Cold Build (s) | Warm Build (ms) | Bundle (KB) | Dist (MB) | Throughput (steps/s) | Wall Time (ms) | Peak RSS (MB) | Checksum |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
 
         for r in reports {
             let status = if r.success { "✅ PASS" } else { "❌ FAIL" };

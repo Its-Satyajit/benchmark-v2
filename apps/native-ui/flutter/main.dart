@@ -107,7 +107,8 @@ void main(List<String> args) {
   int totalActs = 0;
   int actualIters = (isStress || isGui) ? iterations : 1;
 
-  final frameTimes = <double>[];
+  final latencies = <double>[];
+  final snapshotTree = <dynamic>[];
 
   for (int it = 0; it < actualIters; it++) {
     if (isStress || isGui) sb.write('iter:$it;');
@@ -116,7 +117,7 @@ void main(List<String> args) {
     }
 
     for (int i = 0; i < steps.length; i++) {
-      final frameWatch = Stopwatch()..start();
+      final stepWatch = Stopwatch()..start();
       final stepBatch = steps[i] as List<dynamic>;
       totalSteps++;
 
@@ -138,6 +139,9 @@ void main(List<String> args) {
           final current = obs['current'] as Map<String, dynamic>?;
           if (current != null) {
             final players = (current['players'] as List<dynamic>?) ?? [];
+            if (isStress) {
+              snapshotTree.add(players);
+            }
             for (int p = 0; p < players.length; p++) {
               final player = players[p] as Map<String, dynamic>;
               final deckLen = ((player['deck'] as List<dynamic>?) ?? []).length;
@@ -156,10 +160,8 @@ void main(List<String> args) {
         }
       }
 
-      if (isGui) {
-        frameWatch.stop();
-        frameTimes.add(frameWatch.elapsedMicroseconds / 1000.0);
-      }
+      stepWatch.stop();
+      latencies.add(stepWatch.elapsedMicroseconds / 1000.0);
     }
   }
 
@@ -187,27 +189,38 @@ void main(List<String> args) {
     'checksum': checksum,
   };
 
-  if (isGui && frameTimes.isNotEmpty) {
+  if (isStress) {
+    output['snapshots_retained'] = snapshotTree.length;
+    latencies.sort();
+    final p50Idx = (latencies.length * 0.50).floor().clamp(0, latencies.length - 1);
+    final p95Idx = (latencies.length * 0.95).floor().clamp(0, latencies.length - 1);
+    final p99Idx = (latencies.length * 0.99).floor().clamp(0, latencies.length - 1);
+    output['p50_latency_ms'] = (latencies[p50Idx] * 1000).round() / 1000;
+    output['p95_latency_ms'] = (latencies[p95Idx] * 1000).round() / 1000;
+    output['p99_latency_ms'] = (latencies[p99Idx] * 1000).round() / 1000;
+  }
+
+  if (isGui && latencies.isNotEmpty) {
     int jankCount = 0;
     double maxFt = 0.0;
-    for (final ft in frameTimes) {
+    for (final ft in latencies) {
       if (ft > 16.667) jankCount++;
       if (ft > maxFt) maxFt = ft;
     }
 
-    frameTimes.sort();
-    final onePctIdx = (frameTimes.length * 0.99).floor().clamp(0, frameTimes.length - 1);
-    final zeroPointOneIdx = (frameTimes.length * 0.999).floor().clamp(0, frameTimes.length - 1);
+    latencies.sort();
+    final onePctIdx = (latencies.length * 0.99).floor().clamp(0, latencies.length - 1);
+    final zeroPointOneIdx = (latencies.length * 0.999).floor().clamp(0, latencies.length - 1);
 
-    final onePctMs = frameTimes[onePctIdx] > 0 ? frameTimes[onePctIdx] : 0.001;
-    final zeroPointOneMs = frameTimes[zeroPointOneIdx] > 0 ? frameTimes[zeroPointOneIdx] : 0.001;
+    final onePctMs = latencies[onePctIdx] > 0 ? latencies[onePctIdx] : 0.001;
+    final zeroPointOneMs = latencies[zeroPointOneIdx] > 0 ? latencies[zeroPointOneIdx] : 0.001;
 
-    final avgFps = frameTimes.length / (replayMs / 1000.0);
+    final avgFps = latencies.length / (replayMs / 1000.0);
     final onePctFps = 1000.0 / onePctMs;
     final zeroPointOneFps = 1000.0 / zeroPointOneMs;
-    final jankPct = (jankCount / frameTimes.length) * 100.0;
+    final jankPct = (jankCount / latencies.length) * 100.0;
 
-    output['total_frames_rendered'] = frameTimes.length;
+    output['total_frames_rendered'] = latencies.length;
     output['avg_fps'] = (avgFps * 10).round() / 10;
     output['one_percent_low_fps'] = (onePctFps * 10).round() / 10;
     output['zero_point_one_percent_low_fps'] = (zeroPointOneFps * 10).round() / 10;

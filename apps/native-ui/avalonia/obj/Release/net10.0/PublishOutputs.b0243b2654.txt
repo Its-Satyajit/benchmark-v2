@@ -1,0 +1,5 @@
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/dist/native/avalonia/AvaloniaApp
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/dist/native/avalonia/AvaloniaApp.dll
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/dist/native/avalonia/AvaloniaApp.deps.json
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/dist/native/avalonia/AvaloniaApp.runtimeconfig.json
+/home/satyajit/Documents/GitHub/OSS/benchmarks/benchmark-v2/dist/native/avalonia/AvaloniaApp.pdb

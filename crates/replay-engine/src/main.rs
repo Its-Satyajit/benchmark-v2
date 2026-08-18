@@ -28,11 +28,11 @@ fn main() {
     let parse_duration_ms = parse_start.elapsed().as_secs_f64() * 1000.0;
 
     let output = if is_gui {
-        simulate_gui_jank_replay_engine(&replay, parse_duration_ms, iterations, "rust-native-gui")
+        simulate_gui_jank_replay_engine(&replay, parse_duration_ms, "rust-native-gui", iterations)
     } else if is_stress {
-        simulate_stress_replay_engine(&replay, parse_duration_ms, iterations, true, "rust-native-cli")
+        simulate_stress_replay_engine(&replay, parse_duration_ms, "rust-native-cli", iterations)
     } else {
-        simulate_replay_engine(&replay, parse_duration_ms, "rust-native-cli")
+        simulate_replay_engine(&replay, parse_duration_ms, "rust-native-cli", iterations)
     };
 
     println!("{}", serde_json::to_string(&output).unwrap());

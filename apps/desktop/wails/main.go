@@ -50,7 +50,9 @@ type BenchmarkOutput struct {
 	StepsPerSec            float64  `json:"steps_per_sec"`
 	Checksum               string   `json:"checksum"`
 	SnapshotsRetained       *int     `json:"snapshots_retained,omitempty"`
+	P50LatencyMs           *float64 `json:"p50_latency_ms,omitempty"`
 	P95LatencyMs           *float64 `json:"p95_latency_ms,omitempty"`
+	P99LatencyMs           *float64 `json:"p99_latency_ms,omitempty"`
 	TotalFramesRendered    *int     `json:"total_frames_rendered,omitempty"`
 	AvgFps                 *float64 `json:"avg_fps,omitempty"`
 	OnePercentLowFps       *float64 `json:"one_percent_low_fps,omitempty"`
@@ -108,7 +110,8 @@ func main() {
 		actualIters = iterations
 	}
 
-	var frameTimes []float64
+	var latencies []float64
+	var snapshotTree [][]Player
 
 	for it := 0; it < actualIters; it++ {
 		if isStress || isGui {
@@ -119,7 +122,7 @@ func main() {
 		}
 
 		for i, stepBatch := range replay.Steps {
-			frameStart := time.Now()
+			stepStart := time.Now()
 			totalSteps++
 			for j, step := range stepBatch {
 				if len(step.Action) > 0 {
@@ -133,6 +136,9 @@ func main() {
 				}
 
 				if step.Observation != nil && step.Observation.Current != nil {
+					if isStress {
+						snapshotTree = append(snapshotTree, step.Observation.Current.Players)
+					}
 					for p, player := range step.Observation.Current.Players {
 						deckLen := len(player.Deck)
 						handLen := len(player.Hand)
@@ -148,9 +154,7 @@ func main() {
 				}
 			}
 
-			if isGui {
-				frameTimes = append(frameTimes, float64(time.Since(frameStart).Microseconds())/1000.0)
-			}
+			latencies = append(latencies, float64(time.Since(stepStart).Microseconds())/1000.0)
 		}
 	}
 
@@ -180,10 +184,31 @@ func main() {
 		Checksum:         checksum,
 	}
 
-	if isGui && len(frameTimes) > 0 {
+	if isStress {
+		snapsCount := len(snapshotTree)
+		out.SnapshotsRetained = &snapsCount
+
+		sort.Float64s(latencies)
+		p50Idx := int(float64(len(latencies)) * 0.50)
+		p95Idx := int(float64(len(latencies)) * 0.95)
+		p99Idx := int(float64(len(latencies)) * 0.99)
+		if p50Idx >= len(latencies) { p50Idx = len(latencies) - 1 }
+		if p95Idx >= len(latencies) { p95Idx = len(latencies) - 1 }
+		if p99Idx >= len(latencies) { p99Idx = len(latencies) - 1 }
+
+		p50 := latencies[p50Idx]
+		p95 := latencies[p95Idx]
+		p99 := latencies[p99Idx]
+
+		out.P50LatencyMs = &p50
+		out.P95LatencyMs = &p95
+		out.P99LatencyMs = &p99
+	}
+
+	if isGui && len(latencies) > 0 {
 		jankCount := 0
 		maxFt := 0.0
-		for _, ft := range frameTimes {
+		for _, ft := range latencies {
 			if ft > 16.667 {
 				jankCount++
 			}
@@ -192,26 +217,26 @@ func main() {
 			}
 		}
 
-		sort.Float64s(frameTimes)
-		onePctIdx := int(float64(len(frameTimes)) * 0.99)
-		zeroPointOneIdx := int(float64(len(frameTimes)) * 0.999)
-		if onePctIdx >= len(frameTimes) {
-			onePctIdx = len(frameTimes) - 1
+		sort.Float64s(latencies)
+		onePctIdx := int(float64(len(latencies)) * 0.99)
+		zeroPointOneIdx := int(float64(len(latencies)) * 0.999)
+		if onePctIdx >= len(latencies) {
+			onePctIdx = len(latencies) - 1
 		}
-		if zeroPointOneIdx >= len(frameTimes) {
-			zeroPointOneIdx = len(frameTimes) - 1
+		if zeroPointOneIdx >= len(latencies) {
+			zeroPointOneIdx = len(latencies) - 1
 		}
 
-		onePctMs := frameTimes[onePctIdx]
+		onePctMs := latencies[onePctIdx]
 		if onePctMs <= 0 {
 			onePctMs = 0.001
 		}
-		zeroPointOneMs := frameTimes[zeroPointOneIdx]
+		zeroPointOneMs := latencies[zeroPointOneIdx]
 		if zeroPointOneMs <= 0 {
 			zeroPointOneMs = 0.001
 		}
 
-		framesCount := len(frameTimes)
+		framesCount := len(latencies)
 		avgFps := float64(framesCount) / (replayDurationMs / 1000.0)
 		onePctFps := 1000.0 / onePctMs
 		zeroPointOneFps := 1000.0 / zeroPointOneMs

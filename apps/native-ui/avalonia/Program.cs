@@ -58,7 +58,8 @@ class Program
         int totalActs = 0;
         int actualIters = (isStress || isGui) ? iterations : 1;
 
-        var frameTimes = new List<double>();
+        var stepTimes = new List<double>();
+        var snapshotTree = new List<object>();
 
         for (int it = 0; it < actualIters; it++)
         {
@@ -71,7 +72,7 @@ class Program
             int stepBatchIdx = 0;
             foreach (var stepBatch in steps.EnumerateArray())
             {
-                var frameSw = Stopwatch.StartNew();
+                var stepSw = Stopwatch.StartNew();
                 totalSteps++;
                 int stepIdx = 0;
                 foreach (var step in stepBatch.EnumerateArray())
@@ -89,6 +90,11 @@ class Program
                         obs.TryGetProperty("current", out var cur) && cur.ValueKind == JsonValueKind.Object &&
                         cur.TryGetProperty("players", out var players) && players.ValueKind == JsonValueKind.Array)
                     {
+                        if (isStress)
+                        {
+                            snapshotTree.Add(players.Clone());
+                        }
+
                         int pIdx = 0;
                         foreach (var player in players.EnumerateArray())
                         {
@@ -109,11 +115,8 @@ class Program
                     stepIdx++;
                 }
                 stepBatchIdx++;
-                if (isGui)
-                {
-                    frameSw.Stop();
-                    frameTimes.Add(frameSw.Elapsed.TotalMilliseconds);
-                }
+                stepSw.Stop();
+                stepTimes.Add(stepSw.Elapsed.TotalMilliseconds);
             }
         }
 
@@ -131,36 +134,6 @@ class Program
         var totalMs = parseMs + replayMs;
         var stepsPerSec = replayMs > 0 ? (totalSteps / (replayMs / 1000.0)) : 0.0;
 
-        int jankCount = 0;
-        double maxFt = 0.0;
-        double avgFps = 0.0;
-        double onePctFps = 0.0;
-        double zeroPointOneFps = 0.0;
-        double jankPct = 0.0;
-
-        if (isGui && frameTimes.Count > 0)
-        {
-            foreach (var ft in frameTimes)
-            {
-                if (ft > 16.667) jankCount++;
-                if (ft > maxFt) maxFt = ft;
-            }
-
-            frameTimes.Sort();
-            int onePctIdx = (int)(frameTimes.Count * 0.99);
-            int zeroPointOneIdx = (int)(frameTimes.Count * 0.999);
-            if (onePctIdx >= frameTimes.Count) onePctIdx = frameTimes.Count - 1;
-            if (zeroPointOneIdx >= frameTimes.Count) zeroPointOneIdx = frameTimes.Count - 1;
-
-            double onePctMs = frameTimes[onePctIdx] > 0 ? frameTimes[onePctIdx] : 0.001;
-            double zeroPointOneMs = frameTimes[zeroPointOneIdx] > 0 ? frameTimes[zeroPointOneIdx] : 0.001;
-
-            avgFps = frameTimes.Count / (replayMs / 1000.0);
-            onePctFps = 1000.0 / onePctMs;
-            zeroPointOneFps = 1000.0 / zeroPointOneMs;
-            jankPct = ((double)jankCount / frameTimes.Count) * 100.0;
-        }
-
         var result = new Dictionary<string, object?>
         {
             ["target"] = "avalonia-dotnet-desktop",
@@ -172,9 +145,47 @@ class Program
             ["checksum"] = checksum
         };
 
-        if (isGui)
+        if (isStress)
         {
-            result["total_frames_rendered"] = frameTimes.Count;
+            result["snapshots_retained"] = snapshotTree.Count;
+            stepTimes.Sort();
+            int p50Idx = (int)(stepTimes.Count * 0.50);
+            int p95Idx = (int)(stepTimes.Count * 0.95);
+            int p99Idx = (int)(stepTimes.Count * 0.99);
+            if (p50Idx >= stepTimes.Count) p50Idx = stepTimes.Count - 1;
+            if (p95Idx >= stepTimes.Count) p95Idx = stepTimes.Count - 1;
+            if (p99Idx >= stepTimes.Count) p99Idx = stepTimes.Count - 1;
+
+            result["p50_latency_ms"] = Math.Round(stepTimes[p50Idx], 3);
+            result["p95_latency_ms"] = Math.Round(stepTimes[p95Idx], 3);
+            result["p99_latency_ms"] = Math.Round(stepTimes[p99Idx], 3);
+        }
+
+        if (isGui && stepTimes.Count > 0)
+        {
+            int jankCount = 0;
+            double maxFt = 0.0;
+            foreach (var ft in stepTimes)
+            {
+                if (ft > 16.667) jankCount++;
+                if (ft > maxFt) maxFt = ft;
+            }
+
+            stepTimes.Sort();
+            int onePctIdx = (int)(stepTimes.Count * 0.99);
+            int zeroPointOneIdx = (int)(stepTimes.Count * 0.999);
+            if (onePctIdx >= stepTimes.Count) onePctIdx = stepTimes.Count - 1;
+            if (zeroPointOneIdx >= stepTimes.Count) zeroPointOneIdx = stepTimes.Count - 1;
+
+            double onePctMs = stepTimes[onePctIdx] > 0 ? stepTimes[onePctIdx] : 0.001;
+            double zeroPointOneMs = stepTimes[zeroPointOneIdx] > 0 ? stepTimes[zeroPointOneIdx] : 0.001;
+
+            double avgFps = stepTimes.Count / (replayMs / 1000.0);
+            double onePctFps = 1000.0 / onePctMs;
+            double zeroPointOneFps = 1000.0 / zeroPointOneMs;
+            double jankPct = ((double)jankCount / stepTimes.Count) * 100.0;
+
+            result["total_frames_rendered"] = stepTimes.Count;
             result["avg_fps"] = Math.Round(avgFps, 1);
             result["one_percent_low_fps"] = Math.Round(onePctFps, 1);
             result["zero_point_one_percent_low_fps"] = Math.Round(zeroPointOneFps, 1);
