@@ -2,12 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetDescriptor {
@@ -15,7 +14,8 @@ pub struct TargetDescriptor {
     pub name: String,
     pub category: String,
     pub build_command: Option<String>,
-    pub build_artifact_path: Option<String>,
+    pub bundle_artifact_path: Option<String>,
+    pub dist_artifact_path: Option<String>,
     pub run_command: String,
 }
 
@@ -47,7 +47,8 @@ pub struct TargetBenchmarkReport {
     pub target_name: String,
     pub category: String,
     pub build_duration_ms: f64,
-    pub artifact_size_bytes: u64,
+    pub bundle_size_bytes: u64,
+    pub dist_size_bytes: u64,
     pub total_wall_time_ms: f64,
     pub peak_rss_bytes: u64,
     pub success: bool,
@@ -55,8 +56,8 @@ pub struct TargetBenchmarkReport {
     pub metrics: Option<TargetBenchmarkResult>,
 }
 
-pub fn calculate_artifact_size(path_str: &str) -> u64 {
-    let path = Path::new(path_str);
+pub fn calculate_artifact_size<P: AsRef<Path>>(path: P) -> u64 {
+    let path = path.as_ref();
     if !path.exists() {
         return 0;
     }
@@ -65,16 +66,21 @@ pub fn calculate_artifact_size(path_str: &str) -> u64 {
         return fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     }
 
-    let mut total: u64 = 0;
-    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
-            total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+    let mut total_size = 0;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file() {
+                total_size += fs::metadata(&entry_path).map(|m| m.len()).unwrap_or(0);
+            } else if entry_path.is_dir() {
+                total_size += calculate_artifact_size(&entry_path);
+            }
         }
     }
-    total
+    total_size
 }
 
-fn get_process_rss(pid: u32) -> u64 {
+pub fn read_proc_rss(pid: u32) -> u64 {
     let statm_path = format!("/proc/{}/statm", pid);
     if let Ok(mut file) = fs::File::open(&statm_path) {
         let mut content = String::new();
@@ -114,7 +120,8 @@ pub fn execute_target_with_profiling(
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
                     build_duration_ms: 0.0,
-                    artifact_size_bytes: 0,
+                    bundle_size_bytes: 0,
+                    dist_size_bytes: 0,
                     total_wall_time_ms: 0.0,
                     peak_rss_bytes: 0,
                     success: false,
@@ -128,7 +135,8 @@ pub fn execute_target_with_profiling(
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
                     build_duration_ms: 0.0,
-                    artifact_size_bytes: 0,
+                    bundle_size_bytes: 0,
+                    dist_size_bytes: 0,
                     total_wall_time_ms: 0.0,
                     peak_rss_bytes: 0,
                     success: false,
@@ -139,12 +147,18 @@ pub fn execute_target_with_profiling(
         }
     }
 
-    // 2. Measure Artifact Size
-    let artifact_size_bytes = descriptor
-        .build_artifact_path
+    // 2. Measure Dual-Tier Artifact Sizes
+    let bundle_size_bytes = descriptor
+        .bundle_artifact_path
         .as_ref()
         .map(|p| calculate_artifact_size(p))
         .unwrap_or(0);
+
+    let dist_size_bytes = descriptor
+        .dist_artifact_path
+        .as_ref()
+        .map(|p| calculate_artifact_size(p))
+        .unwrap_or(bundle_size_bytes);
 
     // 3. Execution & Memory Sampling Phase
     let run_cmd = descriptor
@@ -158,7 +172,8 @@ pub fn execute_target_with_profiling(
             target_name: descriptor.name.clone(),
             category: descriptor.category.clone(),
             build_duration_ms,
-            artifact_size_bytes,
+            bundle_size_bytes,
+            dist_size_bytes,
             total_wall_time_ms: 0.0,
             peak_rss_bytes: 0,
             success: false,
@@ -168,12 +183,13 @@ pub fn execute_target_with_profiling(
     }
 
     let run_start = Instant::now();
-    let child = match Command::new(parts[0])
+    let child_res = Command::new(parts[0])
         .args(&parts[1..])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn();
+
+    let mut child: Child = match child_res {
         Ok(c) => c,
         Err(e) => {
             return TargetBenchmarkReport {
@@ -181,7 +197,8 @@ pub fn execute_target_with_profiling(
                 target_name: descriptor.name.clone(),
                 category: descriptor.category.clone(),
                 build_duration_ms,
-                artifact_size_bytes,
+                bundle_size_bytes,
+                dist_size_bytes,
                 total_wall_time_ms: 0.0,
                 peak_rss_bytes: 0,
                 success: false,
@@ -195,36 +212,46 @@ pub fn execute_target_with_profiling(
     let running = Arc::new(AtomicBool::new(true));
     let r_clone = running.clone();
 
-    let sampler_thread = thread::spawn(move || {
-        let mut max_rss: u64 = 0;
+    // High-frequency memory polling thread
+    let sampler_handle = thread::spawn(move || {
+        let mut peak_rss: u64 = 0;
         while r_clone.load(Ordering::Relaxed) {
-            let rss = get_process_rss(pid);
-            if rss > max_rss {
-                max_rss = rss;
+            let current_rss = read_proc_rss(pid);
+            if current_rss > peak_rss {
+                peak_rss = current_rss;
             }
-            thread::sleep(Duration::from_millis(2));
+            thread::sleep(Duration::from_millis(1));
         }
-        max_rss
+        let final_rss = read_proc_rss(pid);
+        if final_rss > peak_rss {
+            peak_rss = final_rss;
+        }
+        peak_rss
     });
 
-    let output = child.wait_with_output();
+    let output_res = child.wait_with_output();
     running.store(false, Ordering::Relaxed);
-    let peak_rss_bytes = sampler_thread.join().unwrap_or(0);
+
     let total_wall_time_ms = run_start.elapsed().as_secs_f64() * 1000.0;
+    let peak_rss_bytes = sampler_handle.join().unwrap_or(0);
 
-    match output {
+    match output_res {
         Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let last_line = stdout.lines().filter(|l| !l.trim().is_empty()).last().unwrap_or("{}");
+            let stdout_str = String::from_utf8_lossy(&out.stdout);
+            let json_line = stdout_str
+                .lines()
+                .find(|l| l.trim().starts_with('{') && l.trim().ends_with('}'))
+                .unwrap_or("");
 
-            match serde_json::from_str::<TargetBenchmarkResult>(last_line) {
+            match serde_json::from_str::<TargetBenchmarkResult>(json_line) {
                 Ok(metrics) => TargetBenchmarkReport {
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms: (build_duration_ms * 100.0).round() / 100.0,
-                    artifact_size_bytes,
-                    total_wall_time_ms: (total_wall_time_ms * 100.0).round() / 100.0,
+                    build_duration_ms,
+                    bundle_size_bytes,
+                    dist_size_bytes,
+                    total_wall_time_ms,
                     peak_rss_bytes,
                     success: true,
                     error: None,
@@ -234,28 +261,30 @@ pub fn execute_target_with_profiling(
                     target_id: descriptor.id.clone(),
                     target_name: descriptor.name.clone(),
                     category: descriptor.category.clone(),
-                    build_duration_ms: (build_duration_ms * 100.0).round() / 100.0,
-                    artifact_size_bytes,
-                    total_wall_time_ms: (total_wall_time_ms * 100.0).round() / 100.0,
+                    build_duration_ms,
+                    bundle_size_bytes,
+                    dist_size_bytes,
+                    total_wall_time_ms,
                     peak_rss_bytes,
                     success: false,
-                    error: Some(format!("Failed to parse metrics JSON: {} (Output: {})", e, stdout)),
+                    error: Some(format!("Failed to parse benchmark JSON output: {}. Raw stdout: {}", e, stdout_str)),
                     metrics: None,
                 },
             }
         }
         Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stderr_str = String::from_utf8_lossy(&out.stderr);
             TargetBenchmarkReport {
                 target_id: descriptor.id.clone(),
                 target_name: descriptor.name.clone(),
                 category: descriptor.category.clone(),
-                build_duration_ms: (build_duration_ms * 100.0).round() / 100.0,
-                artifact_size_bytes,
-                total_wall_time_ms: (total_wall_time_ms * 100.0).round() / 100.0,
+                build_duration_ms,
+                bundle_size_bytes,
+                dist_size_bytes,
+                total_wall_time_ms,
                 peak_rss_bytes,
                 success: false,
-                error: Some(format!("Process exited with status {}: {}", out.status, stderr)),
+                error: Some(format!("Process exited with code {}: {}", out.status.code().unwrap_or(-1), stderr_str)),
                 metrics: None,
             }
         }
@@ -263,12 +292,13 @@ pub fn execute_target_with_profiling(
             target_id: descriptor.id.clone(),
             target_name: descriptor.name.clone(),
             category: descriptor.category.clone(),
-            build_duration_ms: (build_duration_ms * 100.0).round() / 100.0,
-            artifact_size_bytes,
-            total_wall_time_ms: (total_wall_time_ms * 100.0).round() / 100.0,
+            build_duration_ms,
+            bundle_size_bytes,
+            dist_size_bytes,
+            total_wall_time_ms,
             peak_rss_bytes,
             success: false,
-            error: Some(format!("Wait failed: {}", e)),
+            error: Some(format!("Failed to wait for process: {}", e)),
             metrics: None,
         },
     }
