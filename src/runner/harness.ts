@@ -12,10 +12,15 @@ export interface TargetDescriptor {
 	readonly name: string;
 	readonly category:
 		| "CLI"
-		| "Web Backend"
-		| "Metaframework"
+		| "Native"
+		| "Cross-Platform Desktop"
 		| "Desktop"
-		| "Native";
+		| "Native UI Engine"
+		| "Rust Native UI"
+		| "Web Frontend"
+		| "Web Metaframework"
+		| "Web Backend"
+		| "Metaframework";
 	readonly buildCommand?: string;
 	readonly buildArtifactPath?: string;
 	readonly runCommand: string;
