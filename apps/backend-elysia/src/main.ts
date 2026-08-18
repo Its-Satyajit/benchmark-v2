@@ -1,9 +1,13 @@
 import { Elysia, t } from 'elysia';
 import { readFileSync } from 'node:fs';
-import { simulateReplay, type ReplayLog } from '@benchmark/shared-replay-core';
+import { simulateReplay, simulateStressReplay, type ReplayLog } from '@benchmark/shared-replay-core';
 
 function runBackendBenchmark() {
   const replayArgIndex = process.argv.indexOf('--replay');
+  const isStress = process.argv.includes('--stress');
+  const iterIndex = process.argv.indexOf('--iterations');
+  const iterations = iterIndex !== -1 ? parseInt(process.argv[iterIndex + 1] ?? '20', 10) : 20;
+
   const replayPath = replayArgIndex !== -1 ? process.argv[replayArgIndex + 1] : undefined;
 
   if (!replayPath) {
@@ -12,7 +16,6 @@ function runBackendBenchmark() {
   }
 
   const app = new Elysia();
-
   app.get('/health', () => ({ status: 'ok' }));
   app.post(
     '/replay/stress',
@@ -24,13 +27,19 @@ function runBackendBenchmark() {
     }
   );
 
-  // Replay workload execution under Elysia backend runtime
   const parseStart = performance.now();
   const raw = readFileSync(replayPath, 'utf8');
   const data = JSON.parse(raw) as ReplayLog;
   const parseDuration = performance.now() - parseStart;
 
-  const result = simulateReplay(data, 'elysia-backend');
+  const result = isStress
+    ? simulateStressReplay(data, {
+        iterations,
+        retainSnapshots: true,
+        targetName: 'elysia-backend',
+      })
+    : simulateReplay(data, 'elysia-backend');
+
   const total = parseDuration + result.replay_duration_ms;
 
   const finalOutput = {

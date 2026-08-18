@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { simulateReplay, type ReplayLog } from '@benchmark/shared-replay-core';
+import { simulateReplay, simulateStressReplay, type ReplayLog } from '@benchmark/shared-replay-core';
 
 function main() {
   const replayArgIndex = process.argv.indexOf('--replay');
+  const isStress = process.argv.includes('--stress');
+  const iterIndex = process.argv.indexOf('--iterations');
+  const iterations = iterIndex !== -1 ? parseInt(process.argv[iterIndex + 1] ?? '20', 10) : 20;
+
   const replayPath = replayArgIndex !== -1 ? process.argv[replayArgIndex + 1] : undefined;
 
   if (!replayPath) {
@@ -15,7 +19,14 @@ function main() {
   const data = JSON.parse(raw) as ReplayLog;
   const parseDuration = performance.now() - parseStart;
 
-  const result = simulateReplay(data, 'node-strict-ts7-cli');
+  const result = isStress
+    ? simulateStressReplay(data, {
+        iterations,
+        retainSnapshots: true,
+        targetName: 'node-strict-ts7-cli',
+      })
+    : simulateReplay(data, 'node-strict-ts7-cli');
+
   const total = parseDuration + result.replay_duration_ms;
 
   const finalOutput = {

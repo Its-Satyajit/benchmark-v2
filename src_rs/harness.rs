@@ -28,6 +28,10 @@ pub struct TargetBenchmarkResult {
     pub total_duration_ms: f64,
     pub steps_per_sec: f64,
     pub checksum: String,
+    pub snapshots_retained: Option<usize>,
+    pub p50_latency_ms: Option<f64>,
+    pub p95_latency_ms: Option<f64>,
+    pub p99_latency_ms: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

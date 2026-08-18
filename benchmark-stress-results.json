@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-08-18T11:25:00Z",
+  "mode": "Extreme Multi-Core Saturation Stress",
+  "replay_file": "92139349.json",
+  "reports": [
+    {
+      "target_id": "rust-native-cli",
+      "target_name": "Rust Native Binary (Compiled)",
+      "category": "Native",
+      "build_duration_ms": 5171.71,
+      "artifact_size_bytes": 912512,
+      "total_wall_time_ms": 128.38,
+      "peak_rss_bytes": 139005952,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "rust-native-cli",
+        "steps_processed": 13550,
+        "parse_duration_ms": 24.07,
+        "replay_duration_ms": 94.79,
+        "total_duration_ms": 118.85,
+        "steps_per_sec": 142950.12,
+        "checksum": "d00563457a7e820d8323778dd625cf2b430cbb1471dd63c0aeb6f660cd6ea372",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.036,
+        "p95_latency_ms": 0.104,
+        "p99_latency_ms": 0.216
+      }
+    },
+    {
+      "target_id": "node-cli",
+      "target_name": "Node / Strict TS7 CLI (nub)",
+      "category": "CLI",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1398,
+      "total_wall_time_ms": 2078.4,
+      "peak_rss_bytes": 26025984,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "node-strict-ts7-cli",
+        "steps_processed": 13550,
+        "parse_duration_ms": 61.96,
+        "replay_duration_ms": 1861.83,
+        "total_duration_ms": 1923.79,
+        "steps_per_sec": 7043.38,
+        "checksum": "d701e13a452f1a0482308e0d1561ada7a2fbf424c62f7a849a8d113392b15b0e",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.133,
+        "p95_latency_ms": 0.193,
+        "p99_latency_ms": 0.28
+      }
+    },
+    {
+      "target_id": "python-cli",
+      "target_name": "Python 3 CLI",
+      "category": "CLI",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 4721,
+      "total_wall_time_ms": 293.8,
+      "peak_rss_bytes": 60305408,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "python-cli",
+        "steps_processed": 13550,
+        "parse_duration_ms": 121.72,
+        "replay_duration_ms": 132.18,
+        "total_duration_ms": 253.9,
+        "steps_per_sec": 102511.83,
+        "checksum": "d701e13a452f1a0482308e0d1561ada7a2fbf424c62f7a849a8d113392b15b0e",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.009,
+        "p95_latency_ms": 0.012,
+        "p99_latency_ms": 0.019
+      }
+    },
+    {
+      "target_id": "elysia-backend",
+      "target_name": "ElysiaJS Web Backend (nub)",
+      "category": "Web Backend",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1707,
+      "total_wall_time_ms": 2381.17,
+      "peak_rss_bytes": 25968640,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "elysia-backend",
+        "steps_processed": 13550,
+        "parse_duration_ms": 66.81,
+        "replay_duration_ms": 2057.75,
+        "total_duration_ms": 2124.56,
+        "steps_per_sec": 6377.79,
+        "checksum": "d701e13a452f1a0482308e0d1561ada7a2fbf424c62f7a849a8d113392b15b0e",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.136,
+        "p95_latency_ms": 0.21,
+        "p99_latency_ms": 0.301
+      }
+    },
+    {
+      "target_id": "nextjs-ssr",
+      "target_name": "Next.js SSR Metaframework (nub)",
+      "category": "Metaframework",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1450,
+      "total_wall_time_ms": 2343.63,
+      "peak_rss_bytes": 25899008,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "nextjs-ssr-metaframework",
+        "steps_processed": 13550,
+        "parse_duration_ms": 73.41,
+        "replay_duration_ms": 2056.25,
+        "total_duration_ms": 2129.66,
+        "steps_per_sec": 6362.52,
+        "checksum": "d701e13a452f1a0482308e0d1561ada7a2fbf424c62f7a849a8d113392b15b0e",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.135,
+        "p95_latency_ms": 0.215,
+        "p99_latency_ms": 0.305
+      }
+    },
+    {
+      "target_id": "desktop-app",
+      "target_name": "Desktop App (Tauri / Electron IPC) (nub)",
+      "category": "Desktop",
+      "build_duration_ms": 0.0,
+      "artifact_size_bytes": 1434,
+      "total_wall_time_ms": 2222.51,
+      "peak_rss_bytes": 25972736,
+      "success": true,
+      "error": null,
+      "metrics": {
+        "target": "tauri-electron-desktop",
+        "steps_processed": 13550,
+        "parse_duration_ms": 76.17,
+        "replay_duration_ms": 1971.5,
+        "total_duration_ms": 2047.67,
+        "steps_per_sec": 6617.29,
+        "checksum": "d701e13a452f1a0482308e0d1561ada7a2fbf424c62f7a849a8d113392b15b0e",
+        "snapshots_retained": 26900,
+        "p50_latency_ms": 0.136,
+        "p95_latency_ms": 0.229,
+        "p99_latency_ms": 0.31
+      }
+    }
+  ]
+}
