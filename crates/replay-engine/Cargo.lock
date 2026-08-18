@@ -6,10 +6,9 @@ version = 4
 name = "benchmark_replay"
 version = "0.1.0"
 dependencies = [
- "hex",
  "serde",
  "serde_json",
- "sha2",
+ "shared-replay-core",
 ]
 
 [[package]]
@@ -160,6 +159,16 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "shared-replay-core"
+version = "1.0.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

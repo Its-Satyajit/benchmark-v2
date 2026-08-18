@@ -14,7 +14,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "isolatedModules": true,
+    "paths": {
+      "@benchmark/shared-replay-core": ["./packages/shared-replay-core/src/index.ts"]
+    },
     "types": ["node"]
   },
-  "include": ["src/**/*", "test/**/*"]
+  "include": ["packages/**/*", "apps/**/*", "src/**/*", "test/**/*"]
 }

@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { readFileSync } from 'node:fs';
-import { simulateReplay, type ReplayLog } from '../core/replay.ts';
+import { simulateReplay, type ReplayLog } from '@benchmark/shared-replay-core';
 
 function runBackendBenchmark() {
   const replayArgIndex = process.argv.indexOf('--replay');
