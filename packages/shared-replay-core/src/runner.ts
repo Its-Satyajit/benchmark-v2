@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { simulateReplay, simulateStressReplay, type ReplayLog } from '@benchmark/shared-replay-core';
+import { simulateReplay, simulateStressReplay, simulateGuiJankReplay, type ReplayLog } from './index.ts';
 
 export function runGenericTarget(targetName: string) {
   const replayArgIndex = process.argv.indexOf('--replay');
   const isStress = process.argv.includes('--stress');
+  const isGui = process.argv.includes('--gui') || process.argv.includes('--gui-jank');
   const iterIndex = process.argv.indexOf('--iterations');
   const iterations = iterIndex !== -1 ? parseInt(process.argv[iterIndex + 1] ?? '20', 10) : 20;
 
@@ -19,7 +20,12 @@ export function runGenericTarget(targetName: string) {
   const data = JSON.parse(raw) as ReplayLog;
   const parseDuration = performance.now() - parseStart;
 
-  const result = isStress
+  const result = isGui
+    ? simulateGuiJankReplay(data, {
+        iterations,
+        targetName,
+      })
+    : isStress
     ? simulateStressReplay(data, {
         iterations,
         retainSnapshots: true,

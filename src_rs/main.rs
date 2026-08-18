@@ -10,6 +10,7 @@ use std::path::Path;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let is_stress = args.iter().any(|a| a == "--stress");
+    let is_gui = args.iter().any(|a| a == "--gui" || a == "--gui-jank");
     let iter_idx = args.iter().position(|a| a == "--iterations");
     let iterations = match iter_idx {
         Some(idx) => args.get(idx + 1).and_then(|v| v.parse::<usize>().ok()).unwrap_or(20),
@@ -23,7 +24,10 @@ fn main() {
         .map(|s| s.as_str())
         .unwrap_or("92139349.json");
 
-    if is_stress {
+    if is_gui {
+        println!("{}", "✨ Launching GUI Jank & Frame Pacing Benchmark Suite".bold().magenta());
+        println!("Mode: Real-time Frame Pacing, 1% Low FPS, VSync Missed Budget Analysis (Iterations: {})\n", iterations);
+    } else if is_stress {
         println!("{}", "🔥 Launching 24-Framework Multi-Core Saturation Stress Benchmark Suite".bold().red());
         println!("Mode: Multi-core saturation, Snapshot Tree retention (Iterations: {})\n", iterations);
     } else {
@@ -35,13 +39,15 @@ fn main() {
         std::process::exit(1);
     }
 
-    let extra_flags = if is_stress {
+    let extra_flags = if is_gui {
+        format!("--gui --iterations {}", iterations)
+    } else if is_stress {
         format!("--stress --iterations {}", iterations)
     } else {
         "".to_string()
     };
 
-    let targets = vec![
+    let all_targets = vec![
         // 1. Rust Native UI
         TargetDescriptor {
             id: "slint".to_string(),
@@ -137,10 +143,10 @@ fn main() {
         // 3. Native & Cross-Platform UI Engines
         TargetDescriptor {
             id: "avalonia".to_string(),
-            name: "Avalonia (.NET 8/9 C#)".to_string(),
+            name: "Avalonia (.NET 10 C#)".to_string(),
             category: "Native UI Engine".to_string(),
             build_command: Some("dotnet build apps/native-ui/avalonia/AvaloniaApp.csproj -c Release".to_string()),
-            build_artifact_path: Some("apps/native-ui/avalonia/bin/Release/net8.0/AvaloniaApp".to_string()),
+            build_artifact_path: Some("apps/native-ui/avalonia/bin/Release/net10.0/AvaloniaApp".to_string()),
             run_command: format!("dotnet run --project apps/native-ui/avalonia/AvaloniaApp.csproj -c Release --no-build -- --replay ${{REPLAY_PATH}} {}", extra_flags),
         },
         TargetDescriptor {
@@ -245,6 +251,16 @@ fn main() {
         },
     ];
 
+    let targets: Vec<TargetDescriptor> = if is_gui {
+        // Filter GUI capable targets (Desktop, Rust UI, Native UI engines, and Web Frontends)
+        all_targets
+            .into_iter()
+            .filter(|t| t.category != "Web Metaframework")
+            .collect()
+    } else {
+        all_targets
+    };
+
     println!("Benchmarking {} targets against Replay Log: {}\n", targets.len(), replay_path);
 
     let mut reports = Vec::new();
@@ -259,14 +275,16 @@ fn main() {
         reports.push(report);
     }
 
-    render_terminal_table(&reports, is_stress);
+    render_terminal_table(&reports, is_stress, is_gui);
 
-    let (json_file, md_file) = if is_stress {
+    let (json_file, md_file) = if is_gui {
+        ("benchmark-gui-results.json", "BENCHMARK_GUI_RESULTS.md")
+    } else if is_stress {
         ("benchmark-stress-results.json", "BENCHMARK_STRESS_RESULTS.md")
     } else {
         ("benchmark-results.json", "BENCHMARK_RESULTS.md")
     };
 
-    export_results(&reports, replay_path, is_stress, json_file, md_file);
+    export_results(&reports, replay_path, is_stress, is_gui, json_file, md_file);
     println!("\n✅ Reports generated: {} & {}\n", json_file.bold(), md_file.bold());
 }

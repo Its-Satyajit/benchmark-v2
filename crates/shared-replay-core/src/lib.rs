@@ -67,6 +67,13 @@ pub struct BenchmarkOutput {
     pub p50_latency_ms: Option<f64>,
     pub p95_latency_ms: Option<f64>,
     pub p99_latency_ms: Option<f64>,
+    pub total_frames_rendered: Option<usize>,
+    pub avg_fps: Option<f64>,
+    pub one_percent_low_fps: Option<f64>,
+    pub zero_point_one_percent_low_fps: Option<f64>,
+    pub jank_frame_count: Option<usize>,
+    pub jank_percentage: Option<f64>,
+    pub max_frame_time_ms: Option<f64>,
 }
 
 pub fn simulate_replay_engine(
@@ -143,6 +150,128 @@ pub fn simulate_replay_engine(
         p50_latency_ms: None,
         p95_latency_ms: None,
         p99_latency_ms: None,
+        total_frames_rendered: None,
+        avg_fps: None,
+        one_percent_low_fps: None,
+        zero_point_one_percent_low_fps: None,
+        jank_frame_count: None,
+        jank_percentage: None,
+        max_frame_time_ms: None,
+    }
+}
+
+pub fn simulate_gui_jank_replay_engine(
+    replay: &ReplayLog,
+    parse_duration_ms: f64,
+    iterations: usize,
+    target_name: &str,
+) -> BenchmarkOutput {
+    let start_time = Instant::now();
+    let mut hasher = Sha256::new();
+    let mut frame_times_ms: Vec<f64> = Vec::new();
+    let vsync_budget_ms = 16.667;
+
+    let mut total_steps = 0;
+    let mut total_cards = 0;
+    let mut total_acts = 0;
+
+    for it in 0..iterations {
+        hasher.update(format!("iter:{};", it));
+        if let Some(ref config) = replay.configuration {
+            if let Some(seed) = config.seed {
+                hasher.update(format!("seed:{};", seed));
+            }
+        }
+
+        for (i, step_batch) in replay.steps.iter().enumerate() {
+            let frame_start = Instant::now();
+            total_steps += 1;
+
+            for (j, step) in step_batch.iter().enumerate() {
+                if let Some(ref act) = step.action {
+                    if !act.is_empty() {
+                        total_acts += act.len();
+                        hasher.update(format!("act:{}:{}:{}:{};", it, i, j, serde_json::to_string(act).unwrap()));
+                    }
+                }
+
+                if let Some(ref obs) = step.observation {
+                    if let Some(ref current) = obs.current {
+                        for (p, player) in current.players.iter().enumerate() {
+                            let deck_len = player.deck.as_ref().map(|d| d.len()).unwrap_or(0);
+                            let hand_len = player.hand.as_ref().map(|h| h.len()).unwrap_or(0);
+                            total_cards += deck_len + hand_len;
+                            hasher.update(format!(
+                                "p:{}:d{}:h{}:a{}:b{};",
+                                p,
+                                deck_len,
+                                hand_len,
+                                player.active.len(),
+                                player.bench.len()
+                            ));
+                        }
+                    }
+                }
+
+                if let Some(ref st) = step.status {
+                    hasher.update(format!("st:{};", st));
+                }
+            }
+
+            frame_times_ms.push(frame_start.elapsed().as_secs_f64() * 1000.0);
+        }
+    }
+
+    hasher.update(format!("final_gui:steps={}:cards={}:acts={}", total_steps, total_cards, total_acts));
+    let checksum = hex::encode(hasher.finalize());
+
+    let total_duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
+    let mut jank_count = 0;
+    let mut max_frame_time = 0.0;
+
+    for &ft in &frame_times_ms {
+        if ft > vsync_budget_ms {
+            jank_count += 1;
+        }
+        if ft > max_frame_time {
+            max_frame_time = ft;
+        }
+    }
+
+    let mut sorted_desc = frame_times_ms.clone();
+    sorted_desc.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+    let one_pct_idx = (sorted_desc.len() as f64 * 0.01) as usize;
+    let zero_point_one_idx = (sorted_desc.len() as f64 * 0.001) as usize;
+
+    let one_pct_ms = sorted_desc.get(one_pct_idx).copied().unwrap_or(0.001).max(0.001);
+    let zero_point_one_ms = sorted_desc.get(zero_point_one_idx).copied().unwrap_or(0.001).max(0.001);
+
+    let avg_fps = (frame_times_ms.len() as f64) / (total_duration_ms / 1000.0);
+    let one_pct_fps = 1000.0 / one_pct_ms;
+    let zero_point_one_fps = 1000.0 / zero_point_one_ms;
+    let jank_pct = (jank_count as f64 / frame_times_ms.len().max(1) as f64) * 100.0;
+    let steps_per_sec = (total_steps as f64 / (total_duration_ms / 1000.0)).max(0.0);
+
+    BenchmarkOutput {
+        target: target_name.to_string(),
+        steps_processed: total_steps,
+        parse_duration_ms: (parse_duration_ms * 100.0).round() / 100.0,
+        replay_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
+        total_duration_ms: (total_duration_ms * 100.0).round() / 100.0,
+        steps_per_sec: (steps_per_sec * 100.0).round() / 100.0,
+        checksum,
+        snapshots_retained: None,
+        p50_latency_ms: None,
+        p95_latency_ms: None,
+        p99_latency_ms: None,
+        total_frames_rendered: Some(frame_times_ms.len()),
+        avg_fps: Some((avg_fps * 10.0).round() / 10.0),
+        one_percent_low_fps: Some((one_pct_fps * 10.0).round() / 10.0),
+        zero_point_one_percent_low_fps: Some((zero_point_one_fps * 10.0).round() / 10.0),
+        jank_frame_count: Some(jank_count),
+        jank_percentage: Some((jank_pct * 100.0).round() / 100.0),
+        max_frame_time_ms: Some((max_frame_time * 100.0).round() / 100.0),
     }
 }
 
@@ -155,7 +284,6 @@ pub fn simulate_stress_replay_engine(
 ) -> BenchmarkOutput {
     let start_time = Instant::now();
 
-    // Parallel multi-core execution across batch iterations
     let batch_results: Vec<(usize, usize, usize, String, Vec<f64>, usize)> = (0..iterations)
         .into_par_iter()
         .map(|it| {
@@ -261,5 +389,12 @@ pub fn simulate_stress_replay_engine(
         p50_latency_ms: Some((p50 * 1000.0).round() / 1000.0),
         p95_latency_ms: Some((p95 * 1000.0).round() / 1000.0),
         p99_latency_ms: Some((p99 * 1000.0).round() / 1000.0),
+        total_frames_rendered: None,
+        avg_fps: None,
+        one_percent_low_fps: None,
+        zero_point_one_percent_low_fps: None,
+        jank_frame_count: None,
+        jank_percentage: None,
+        max_frame_time_ms: None,
     }
 }

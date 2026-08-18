@@ -32,6 +32,13 @@ pub struct TargetBenchmarkResult {
     pub p50_latency_ms: Option<f64>,
     pub p95_latency_ms: Option<f64>,
     pub p99_latency_ms: Option<f64>,
+    pub total_frames_rendered: Option<usize>,
+    pub avg_fps: Option<f64>,
+    pub one_percent_low_fps: Option<f64>,
+    pub zero_point_one_percent_low_fps: Option<f64>,
+    pub jank_frame_count: Option<usize>,
+    pub jank_percentage: Option<f64>,
+    pub max_frame_time_ms: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
