@@ -264,7 +264,7 @@ pub fn export_results(
         md.push_str("# Multi-Stack Application Benchmark Results Matrix\n\n");
         md.push_str(&format!("**Replay Log**: `{}`\n\n", replay_file));
         md.push_str("| Target Stack | Category | Status | Cold Build (s) | Warm Build (ms) | Bundle (KB) | Dist (MB) | Throughput (steps/s) | Wall Time (ms) | Peak RSS (MB) | Checksum |\n");
-        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        md.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
 
         for r in reports {
             let status = if r.success { "✅ PASS" } else { "❌ FAIL" };
